@@ -44,5 +44,5 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Screenshots
+# Root screenshots / test artifacts
 /*.png
