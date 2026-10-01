@@ -329,8 +329,12 @@ class _DashboardPageState extends State<DashboardPage> {
           _attendanceCount = pCount;
         }
 
-        // Respect user's explicit punch on this device today, or backend lastAttendance
-        if (localPunch != null) {
+        // Prioritize live server lastAttendance, with local device fallback
+        if (lastAttendance != null && lastAttendance.inOutTime.isNotEmpty) {
+          _isCheckedIn = lastAttendance.isCheckedIn;
+          _isCheckedOut = lastAttendance.isCheckedOut;
+          _checkInTime = lastAttendance.formattedTime;
+        } else if (localPunch != null) {
           final isPunchedIn = localPunch['status'] == 'IN';
           _isCheckedIn = isPunchedIn;
           _isCheckedOut = !isPunchedIn;
@@ -339,12 +343,6 @@ class _DashboardPageState extends State<DashboardPage> {
               inOutTime: localPunch['time']!,
               timeFlag: isPunchedIn ? 1 : 0,
             ).formattedTime;
-          }
-        } else if (lastAttendance != null) {
-          _isCheckedIn = lastAttendance.isCheckedIn;
-          _isCheckedOut = lastAttendance.isCheckedOut;
-          if (lastAttendance.inOutTime.isNotEmpty) {
-            _checkInTime = lastAttendance.formattedTime;
           }
         }
       });
@@ -355,9 +353,23 @@ class _DashboardPageState extends State<DashboardPage> {
     final currentBranch = _selectedBranch;
     if (currentBranch == null) return;
     try {
+      final user = await LocalStorageService.getUser();
+      final last = await _attendanceService.fetchLastAttendance(
+        branchId: currentBranch.id,
+        employeeId: user?.employeeId,
+      );
+      if (!mounted) return;
+      if (last != null && last.inOutTime.isNotEmpty) {
+        setState(() {
+          _isCheckedIn = last.isCheckedIn;
+          _isCheckedOut = last.isCheckedOut;
+          _checkInTime = last.formattedTime;
+        });
+        return;
+      }
+
       final localPunch = await LocalStorageService.getLastPunch();
-      if (localPunch != null) {
-        if (!mounted) return;
+      if (localPunch != null && mounted) {
         final isPunchedIn = localPunch['status'] == 'IN';
         setState(() {
           _isCheckedIn = isPunchedIn;
@@ -369,26 +381,10 @@ class _DashboardPageState extends State<DashboardPage> {
             ).formattedTime;
           }
         });
-        return;
-      }
-
-      final user = await LocalStorageService.getUser();
-      final last = await _attendanceService.fetchLastAttendance(
-        branchId: currentBranch.id,
-        employeeId: user?.employeeId,
-      );
-      if (!mounted) return;
-      if (last != null) {
-        setState(() {
-          _isCheckedIn = last.isCheckedIn;
-          _isCheckedOut = last.isCheckedOut;
-          if (last.inOutTime.isNotEmpty) {
-            _checkInTime = last.formattedTime;
-          }
-        });
       }
     } catch (_) {}
   }
+
 
   Future<void> _showTodayPunchHistory() async {
     final currentBranch = _selectedBranch;
