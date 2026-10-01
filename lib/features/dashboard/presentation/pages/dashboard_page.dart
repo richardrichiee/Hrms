@@ -612,10 +612,26 @@ class _DashboardPageState extends State<DashboardPage> {
       final now = DateTime.now();
       final timeStr =
           "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+      final newFlag = _isCheckedIn ? 0 : 1;
       final formattedDisplay = LastAttendanceModel(
         inOutTime: timeStr,
-        timeFlag: _isCheckedIn ? 0 : 1,
+        timeFlag: newFlag,
       ).formattedTime;
+      final dateFormatted = DateFormat('dd/MM/yyyy').format(now);
+      final user = await LocalStorageService.getUser();
+      final empId = user?.employeeId ?? 1;
+
+      // 1. Post punch live to server
+      await _attendanceService.saveAttendance(
+        branchId: branch.id,
+        employeeId: empId,
+        inOutTime: timeStr,
+        timeFlag: newFlag,
+        date: dateFormatted,
+        reason: newFlag == 1 ? 'Mobile Check In' : 'Mobile Check Out',
+      );
+
+      if (!mounted) return;
 
       setState(() {
         _isCheckedIn = !_isCheckedIn;
@@ -656,6 +672,9 @@ class _DashboardPageState extends State<DashboardPage> {
         time: timeStr,
         reason: _isCheckedIn ? 'Mobile Check In' : 'Mobile Check Out',
       );
+
+      // 2. Fetch latest attendance from server to guarantee sync
+      await _fetchAndApplyLastAttendance();
     } catch (e) {
       if (!mounted) return;
       _showLocationDialog(

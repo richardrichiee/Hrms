@@ -268,6 +268,16 @@ class AppUrls {
     final time = timestamp;
     return '${baseUrl}api/HRM/Mobile/v1/GetHistoryAttendance/$accessPoint/$time/$branchId/$employeeId';
   }
+
+  /// Endpoint: POST /api/HRM/Attendance/v1/Save/{id}/{userId}/{timeStamp}/{accessPoint}
+  static String getSaveAttendanceUrl({
+    int id = 0,
+    required int userId,
+    required String accessPoint,
+  }) {
+    final time = timestamp;
+    return '${baseUrl}api/HRM/Attendance/v1/Save/$id/$userId/$time/$accessPoint';
+  }
 }
 
 
