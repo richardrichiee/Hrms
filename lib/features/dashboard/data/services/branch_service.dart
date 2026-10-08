@@ -32,12 +32,28 @@ class BranchService {
         final data = response.data;
         if (data['value'] != null && data['value'] is List) {
           final list = data['value'] as List;
-          final branches = list
+          final serverBranches = list
               .map((item) => BranchModel.fromJson(item as Map<String, dynamic>))
               .toList();
-          if (branches.isNotEmpty) {
-            await LocalStorageService.saveBranches(branches);
-            return branches;
+          if (serverBranches.isNotEmpty) {
+            // Merge with local cached coordinates so nulls from server don't wipe out configured coordinates
+            final cached = await LocalStorageService.getBranches();
+            final merged = serverBranches.map((serverB) {
+              final localB = cached.firstWhere(
+                (c) => c.value == serverB.value,
+                orElse: () => serverB,
+              );
+              return BranchModel(
+                value: serverB.value,
+                name: serverB.name,
+                latitude: serverB.latitude ?? localB.latitude,
+                longitude: serverB.longitude ?? localB.longitude,
+                radius: serverB.radius ?? localB.radius ?? 100.0,
+              );
+            }).toList();
+
+            await LocalStorageService.saveBranches(merged);
+            return merged;
           }
         }
       }
@@ -106,4 +122,3 @@ class BranchService {
     }
   }
 }
-

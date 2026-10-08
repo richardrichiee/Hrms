@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../core/storage/local_storage_service.dart';
 import '../../data/models/leave_application_model.dart';
 import '../../data/services/leave_service.dart';
 import '../widgets/apply_leave_dialog.dart';
@@ -37,11 +38,15 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
 
   Future<void> _loadApplications() async {
     setState(() => _isLoading = true);
+    final user = await LocalStorageService.getUser();
+    final currentUserName = user?.userName ?? '';
     final allApps = await _leaveService.fetchLeaveApplications();
 
     if (mounted) {
       setState(() {
         _filteredApplications = allApps.where((app) {
+          final isUser = _isCurrentUser(app.employee, currentUserName);
+          if (!isUser) return false;
           final name = app.leaveName.toLowerCase();
           final target = widget.leaveName.toLowerCase();
           return name.contains(target) ||
@@ -51,6 +56,18 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
         _isLoading = false;
       });
     }
+  }
+
+  bool _isCurrentUser(String employeeName, String currentUserName) {
+    if (currentUserName.trim().isEmpty) return true;
+    final cleanEmp =
+        employeeName.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+    final cleanUser =
+        currentUserName.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+    if (cleanEmp.isEmpty || cleanUser.isEmpty) return false;
+    return cleanEmp == cleanUser ||
+        cleanEmp.contains(cleanUser) ||
+        cleanUser.contains(cleanEmp);
   }
 
   void _openApplyModal() {

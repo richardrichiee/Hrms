@@ -44,15 +44,22 @@ class LeaveDetailsModel {
     switch (approvalStatus.toUpperCase()) {
       case 'A':
       case 'APPROVED':
+      case 'APPROVE':
         return 'Approved';
       case 'P':
       case 'PENDING':
+      case 'N':
         return 'Pending';
       case 'R':
       case 'REJECTED':
+      case 'REJECT':
         return 'Rejected';
+      case 'F':
+      case 'FORWARD':
+      case 'FORWARDED':
+        return 'Forwarded';
       default:
-        return 'Approved';
+        return 'Pending';
     }
   }
 

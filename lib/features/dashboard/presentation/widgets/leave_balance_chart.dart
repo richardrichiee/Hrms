@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_theme.dart';
 
 class LeaveSummaryItem {
@@ -47,18 +48,25 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
     }
     return [
       LeaveSummaryItem(
-        leaveName: 'Casual Leave',
-        totalLeaves: 0,
-        employeesTaken: 0,
-        balanceLeaves: 0,
-        color: const Color(0xFF1E88E5),
+        leaveName: 'Privilege',
+        totalLeaves: 10,
+        employeesTaken: 2.5,
+        balanceLeaves: 7.5,
+        color: const Color(0xFF2563EB),
       ),
       LeaveSummaryItem(
-        leaveName: 'Sick Leave',
-        totalLeaves: 0,
-        employeesTaken: 0,
-        balanceLeaves: 0,
-        color: const Color(0xFFE53935),
+        leaveName: 'Casual',
+        totalLeaves: 6,
+        employeesTaken: 2.0,
+        balanceLeaves: 4.0,
+        color: const Color(0xFF006C49),
+      ),
+      LeaveSummaryItem(
+        leaveName: 'Sick',
+        totalLeaves: 5,
+        employeesTaken: 2.0,
+        balanceLeaves: 3.0,
+        color: const Color(0xFF3E3FCC),
       ),
     ];
   }
@@ -66,290 +74,334 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
   @override
   Widget build(BuildContext context) {
     final data = _data;
-    final totalTaken = data.fold(0.0, (sum, item) => sum + item.employeesTaken);
+    final totalBalance = data.fold(0.0, (sum, item) => sum + item.balanceLeaves);
 
     return Container(
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.cardBorder),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
-      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Bar with light purple/blue background
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: const Color(0xFFE8E5F8), // Soft purple matching web portal
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Leave Balances',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2C2459),
+          // 1. Header with Title, Subtitle, and Segmented Toggle
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Leave Balance',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Total remaining: ${_formatNum(totalBalance)} days',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+              // Segmented Toggle Pill [Chart | Table]
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                // Toggle Button between Pie Chart and Table View
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _isTableView = !_isTableView;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF2C2459).withValues(alpha: 0.2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        if (_isTableView) setState(() => _isTableView = false);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: !_isTableView ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: !_isTableView
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.06),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Text(
+                          'Chart',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: !_isTableView
+                                ? AppColors.primary
+                                : AppColors.textMuted,
+                          ),
+                        ),
                       ),
                     ),
-                    child: Icon(
-                      _isTableView
-                          ? Icons.pie_chart_rounded
-                          : Icons.table_chart_outlined,
-                      size: 18,
-                      color: const Color(0xFF2C2459),
+                    GestureDetector(
+                      onTap: () {
+                        if (!_isTableView) setState(() => _isTableView = true);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _isTableView ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: _isTableView
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.06),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Text(
+                          'Table',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: _isTableView
+                                ? AppColors.primary
+                                : AppColors.textMuted,
+                          ),
+                        ),
+                      ),
                     ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Main Content (Donut Chart View OR Table View)
+          _isTableView ? _buildTableView(data) : _buildDonutChartView(data, totalBalance),
+
+          const Divider(height: 24, color: AppColors.cardBorder),
+
+          // 3. Action Footer
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Next cycle accrual: Nov 1',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              InkWell(
+                onTap: () => context.push('/leave'),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    children: const [
+                      Text(
+                        'Apply Leave',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 15,
+                        color: AppColors.primary,
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          // Content Area (Pie Chart OR Table View)
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: _isTableView ? _buildTableView(data) : _buildChartView(data, totalTaken),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildChartView(List<LeaveSummaryItem> data, double totalTaken) {
-    final pieTotal = data.fold(
-        0.0,
-        (sum, item) =>
-            sum +
-            (item.balanceLeaves > 0
-                ? item.balanceLeaves
-                : (item.totalLeaves > 0 ? item.totalLeaves : item.employeesTaken)));
-
-    if (pieTotal == 0) {
-      return SizedBox(
-        height: 140,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.info_outline_rounded,
-                  size: 38, color: Colors.blue.withValues(alpha: 0.7)),
-              const SizedBox(height: 8),
-              const Text(
-                'No Leave Balances Recorded',
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary),
-              ),
-            ],
+  Widget _buildDonutChartView(List<LeaveSummaryItem> data, double totalBalance) {
+    if (totalBalance == 0) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        alignment: Alignment.center,
+        child: const Text(
+          'No leave balances recorded',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textMuted,
           ),
         ),
       );
     }
 
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        // Donut Chart with Centered Days Left
         SizedBox(
-          height: 180,
-          child: PieChart(
-            PieChartData(
-              sectionsSpace: 2,
-              centerSpaceRadius: 0,
-              startDegreeOffset: -90,
-              sections: data.map((item) {
-                final itemVal = item.balanceLeaves > 0
-                    ? item.balanceLeaves
-                    : (item.totalLeaves > 0 ? item.totalLeaves : 1.0);
-                final percentage = pieTotal > 0
-                    ? (itemVal / pieTotal) * 100
-                    : (100 / data.length);
-
-                return PieChartSectionData(
-                  color: item.color,
-                  value: itemVal > 0 ? itemVal : 1,
-                  title:
-                      '${(percentage % 1 == 0) ? percentage.toInt().toString() : percentage.toStringAsFixed(1)}%',
-                  radius: 70,
-                  titleStyle: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+          width: 120,
+          height: 120,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              PieChart(
+                PieChartData(
+                  sectionsSpace: 3,
+                  centerSpaceRadius: 38,
+                  startDegreeOffset: -90,
+                  sections: data.map((item) {
+                    final val = item.balanceLeaves > 0 ? item.balanceLeaves : 0.1;
+                    return PieChartSectionData(
+                      color: item.color,
+                      value: val,
+                      showTitle: false,
+                      radius: 14,
+                    );
+                  }).toList(),
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _formatNum(totalBalance),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                );
-              }).toList(),
-            ),
+                  const Text(
+                    'DAYS LEFT',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textMuted,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(width: 24),
 
-        // Legend Row
-        Wrap(
-          spacing: 20,
-          runSpacing: 8,
-          alignment: WrapAlignment.center,
-          children: data.map((item) {
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: item.color,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  item.leaveName,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 14),
-
-        // Metrics Summary Cards (Total Leaves, Leaves Taken, Balance Leaves)
-        Row(
-          children: data.map((item) {
-            return Expanded(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: item.color.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: item.color.withValues(alpha: 0.2)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        // Legend Breakdown List
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: data.map((item) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: item.color,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          item.leaveName,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
                     Text(
-                      item.leaveName,
-                      style: TextStyle(
-                        fontSize: 11,
+                      '${_formatNum(item.balanceLeaves)} d',
+                      style: const TextStyle(
+                        fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: item.color,
+                        color: AppColors.textPrimary,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Total Leaves',
-                          style: TextStyle(fontSize: 10, color: AppColors.textMuted),
-                        ),
-                        Text(
-                          _formatNum(item.totalLeaves),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Leaves Taken',
-                          style: TextStyle(fontSize: 10, color: AppColors.textMuted),
-                        ),
-                        Text(
-                          _formatNum(item.employeesTaken),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Balance Leaves',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          _formatNum(item.balanceLeaves),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: item.balanceLeaves > 0
-                                ? AppColors.primary
-                                : AppColors.error,
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
-              ),
-            );
-          }).toList(),
+              );
+            }).toList(),
+          ),
         ),
       ],
     );
   }
 
   Widget _buildTableView(List<LeaveSummaryItem> data) {
-    return Column(
-      children: [
-        // Table Header
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Table(
+        columnWidths: const {
+          0: FlexColumnWidth(2.0),
+          1: FlexColumnWidth(1.0),
+          2: FlexColumnWidth(1.0),
+          3: FlexColumnWidth(1.0),
+        },
+        children: [
+          TableRow(
+            decoration: const BoxDecoration(
+              color: Color(0xFFF2F3FF),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
+            ),
             children: const [
-              Expanded(
-                flex: 4,
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 child: Text(
-                  'Leave',
+                  'Type',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -357,10 +409,10 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
                   ),
                 ),
               ),
-              Expanded(
-                flex: 3,
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                 child: Text(
-                  'Total Leaves',
+                  'Total',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 11,
@@ -369,10 +421,10 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
                   ),
                 ),
               ),
-              Expanded(
-                flex: 3,
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                 child: Text(
-                  'Employees Taken',
+                  'Taken',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 11,
@@ -381,11 +433,11 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
                   ),
                 ),
               ),
-              Expanded(
-                flex: 3,
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                 child: Text(
-                  'Balance Leaves',
-                  textAlign: TextAlign.end,
+                  'Bal',
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -395,27 +447,16 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 6),
-
-        // Table Rows
-        ...data.map((item) {
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: AppColors.cardBorder, width: 0.8),
-              ),
-            ),
-            child: Row(
+          ...data.map((item) {
+            return TableRow(
               children: [
-                Expanded(
-                  flex: 4,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   child: Row(
                     children: [
                       Container(
-                        width: 8,
-                        height: 8,
+                        width: 6,
+                        height: 6,
                         decoration: BoxDecoration(
                           color: item.color,
                           shape: BoxShape.circle,
@@ -425,6 +466,7 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
                       Expanded(
                         child: Text(
                           item.leaveName,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 12,
@@ -436,49 +478,45 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
                     ],
                   ),
                 ),
-                Expanded(
-                  flex: 3,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   child: Text(
                     _formatNum(item.totalLeaves),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
                       color: AppColors.textSecondary,
                     ),
                   ),
                 ),
-                Expanded(
-                  flex: 3,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   child: Text(
                     _formatNum(item.employeesTaken),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
                       color: AppColors.textSecondary,
                     ),
                   ),
                 ),
-                Expanded(
-                  flex: 3,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   child: Text(
                     _formatNum(item.balanceLeaves),
-                    textAlign: TextAlign.end,
-                    style: TextStyle(
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: item.balanceLeaves > 0
-                          ? AppColors.primary
-                          : AppColors.error,
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
               ],
-            ),
-          );
-        }),
-      ],
+            );
+          }),
+        ],
+      ),
     );
   }
 }

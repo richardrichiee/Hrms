@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../core/storage/local_storage_service.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../dashboard/data/models/branch_model.dart';
+import '../../../dashboard/data/services/branch_service.dart';
 import '../../data/models/employee_details_model.dart';
 import '../../data/services/employee_service.dart';
 
@@ -15,8 +17,11 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final _employeeService = EmployeeService();
+  final _branchService = BranchService();
+
   UserModel? _user;
   EmployeeDetailsModel? _employeeDetails;
+  String? _branchName;
   bool _isLoading = true;
 
   @override
@@ -26,15 +31,71 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadProfileData() async {
-    final details = await _employeeService.fetchEmployeeDashboard();
-    final user = await LocalStorageService.getUser();
-    if (mounted) {
-      setState(() {
-        _employeeDetails = details;
-        _user = user;
-        _isLoading = false;
-      });
+    setState(() => _isLoading = true);
+    try {
+      final results = await Future.wait([
+        _employeeService.fetchEmployeeDashboard(),
+        LocalStorageService.getUser(),
+        _branchService.fetchBranches(),
+        LocalStorageService.getSelectedBranchId(),
+      ]);
+
+      final details = results[0] as EmployeeDetailsModel?;
+      final user = results[1] as UserModel?;
+      final branches = results[2] as List<BranchModel>;
+      final savedBranchId = results[3] as int?;
+
+      String? branchName;
+      if (branches.isNotEmpty) {
+        if (savedBranchId != null) {
+          final match = branches.firstWhere(
+            (b) => b.id == savedBranchId,
+            orElse: () => branches.first,
+          );
+          branchName = match.name;
+        } else {
+          branchName = branches.first.name;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _employeeDetails = details;
+          _user = user;
+          _branchName = branchName;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  String get _userName {
+    if (_employeeDetails != null && _employeeDetails!.name.isNotEmpty) {
+      return _employeeDetails!.name;
+    }
+    if (_user != null && _user!.userName.isNotEmpty) {
+      return _user!.userName;
+    }
+    return 'Employee';
+  }
+
+  String get _userDesignation {
+    if (_employeeDetails != null && _employeeDetails!.designation.isNotEmpty) {
+      return _employeeDetails!.designation;
+    }
+    return 'Team Member';
+  }
+
+  String get _userAvatarLetter {
+    final name = _userName.trim();
+    if (name.isNotEmpty) {
+      return name[0].toUpperCase();
+    }
+    return 'U';
   }
 
   Future<void> _handleLogout(BuildContext context) async {
@@ -42,8 +103,13 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('Confirm Logout'),
-          content: const Text('Are you sure you want to log out of your session?'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('Sign Out'),
+          content: const Text(
+            'Are you sure you want to sign out from your account?',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -54,7 +120,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 backgroundColor: AppColors.error,
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Logout'),
+              child: const Text('Sign Out'),
             ),
           ],
         );
@@ -66,7 +132,7 @@ class _ProfilePageState extends State<ProfilePage> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Logged out successfully.'),
+            content: Text('Signed out successfully.'),
             backgroundColor: AppColors.textPrimary,
           ),
         );
@@ -77,21 +143,53 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final name = _employeeDetails?.name.isNotEmpty == true
-        ? _employeeDetails!.name
-        : (_user?.userName.isNotEmpty == true ? _user!.userName : 'Employee');
-    final designation = _employeeDetails?.designation.isNotEmpty == true
-        ? _employeeDetails!.designation
-        : 'Team Member';
     final phone = _employeeDetails?.phoneNumber ?? '';
     final email = _employeeDetails?.email ?? '';
     final address = _employeeDetails?.contactAddress ?? '';
     final employmentType = _employeeDetails?.employmentType ?? '';
     final doj = _employeeDetails?.doj ?? '';
+    final empCode = _employeeDetails?.empCode.isNotEmpty == true
+        ? _employeeDetails!.empCode
+        : (_employeeDetails?.empId != null && _employeeDetails!.empId > 0
+            ? 'EMP-${_employeeDetails!.empId.toString().padLeft(4, '0')}'
+            : 'EMP-0026');
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('My Profile'),
+        title: const Text(
+          'My Profile',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              context.go('/dashboard');
+            }
+          },
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, size: 22),
+            onPressed: () => context.go('/settings'),
+            tooltip: 'Settings',
+          ),
+          const SizedBox(width: 4),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: const Color(0xFFE2E8F0), height: 1),
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -100,210 +198,531 @@ class _ProfilePageState extends State<ProfilePage> {
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.only(
-                  left: 20.0,
-                  right: 20.0,
-                  top: 20.0,
+                  left: 16.0,
+                  right: 16.0,
+                  top: 16.0,
                   bottom: MediaQuery.of(context).padding.bottom + 24,
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Profile Header Card (Avatar + Centered Name matching Web)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 24,
-                        horizontal: 16,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.02),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          // Web-style avatar with outer blue circle & dark silhouette
-                          Container(
-                            width: 92,
-                            height: 92,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: const Color(0xFF6B8AFD),
-                                width: 2.5,
-                              ),
-                            ),
-                            padding: const EdgeInsets.all(4),
-                            child: Container(
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Color(0xFF384967),
-                              ),
-                              child: const Icon(
-                                Icons.person,
-                                size: 58,
-                                color: Color(0xFFE2E8F0),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          Text(
-                            name,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 19,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E293B),
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    // 1. Top Profile Hero Card matching Dashboard/Drawer
+                    _buildProfileHeroCard(empCode),
                     const SizedBox(height: 16),
 
-                    // Web Profile Details List
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.02),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          if (designation.isNotEmpty) ...[
-                            _WebProfileRow(
-                              icon: Icons.account_tree_outlined,
-                              text: designation,
-                            ),
-                            const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                          ],
-                          if (phone.isNotEmpty) ...[
-                            _WebProfileRow(
-                              icon: Icons.phone_outlined,
-                              text: phone,
-                            ),
-                            const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                          ],
-                          if (email.isNotEmpty) ...[
-                            _WebProfileRow(
-                              icon: Icons.mail_outline_rounded,
-                              text: email,
-                            ),
-                            const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                          ],
-                          if (address.isNotEmpty) ...[
-                            _WebProfileRow(
-                              icon: Icons.location_on_outlined,
-                              text: address,
-                            ),
-                            const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                          ],
-                          if (employmentType.isNotEmpty) ...[
-                            _WebProfileRow(
-                              icon: Icons.business_center_outlined,
-                              text: employmentType,
-                            ),
-                            const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                          ],
-                          if (doj.isNotEmpty) ...[
-                            _WebProfileRow(
-                              icon: Icons.calendar_today_outlined,
-                              text: doj,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
+                    // 2. Metrics Stats Row (Attendance, Leaves, Claims)
+                    _buildMetricsRow(),
+                    const SizedBox(height: 22),
 
-                    // Logout Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _handleLogout(context),
-                        icon: const Icon(
-                          Icons.logout_rounded,
-                          color: AppColors.error,
+                    // 3. Work & Employment
+                    _buildSectionHeader('WORK & EMPLOYMENT'),
+                    const SizedBox(height: 8),
+                    _ProfileGroupCard(
+                      children: [
+                        _ProfileInfoRow(
+                          icon: Icons.badge_outlined,
+                          iconBg: const Color(0xFFEFF6FF),
+                          iconColor: AppColors.primary,
+                          label: 'Employee Code',
+                          value: empCode,
                         ),
-                        label: const Text(
-                          'Logout',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.error,
-                          ),
+                        const _ProfileDivider(),
+                        _ProfileInfoRow(
+                          icon: Icons.work_outline_rounded,
+                          iconBg: const Color(0xFFEEF2FF),
+                          iconColor: Colors.indigo,
+                          label: 'Designation / Role',
+                          value: _userDesignation,
                         ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          side: const BorderSide(
-                            color: AppColors.error,
-                            width: 1.5,
+                        if (employmentType.isNotEmpty) ...[
+                          const _ProfileDivider(),
+                          _ProfileInfoRow(
+                            icon: Icons.business_center_outlined,
+                            iconBg: const Color(0xFFFEF3C7),
+                            iconColor: const Color(0xFFD97706),
+                            label: 'Employment Type',
+                            value: employmentType,
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                        ],
+                        if (_branchName != null && _branchName!.isNotEmpty) ...[
+                          const _ProfileDivider(),
+                          _ProfileInfoRow(
+                            icon: Icons.storefront_rounded,
+                            iconBg: const Color(0xFFECFEFF),
+                            iconColor: const Color(0xFF0891B2),
+                            label: 'Branch / Location',
+                            value: _branchName!,
                           ),
-                        ),
-                      ),
+                        ],
+                        if (doj.isNotEmpty) ...[
+                          const _ProfileDivider(),
+                          _ProfileInfoRow(
+                            icon: Icons.calendar_month_outlined,
+                            iconBg: const Color(0xFFECFDF5),
+                            iconColor: const Color(0xFF059669),
+                            label: 'Date of Joining',
+                            value: doj,
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 22),
+
+                    // 4. Contact & Address
+                    _buildSectionHeader('CONTACT & COMMUNICATION'),
+                    const SizedBox(height: 8),
+                    _ProfileGroupCard(
+                      children: [
+                        if (email.isNotEmpty) ...[
+                          _ProfileInfoRow(
+                            icon: Icons.mail_outline_rounded,
+                            iconBg: const Color(0xFFEFF6FF),
+                            iconColor: AppColors.primary,
+                            label: 'Email Address',
+                            value: email,
+                          ),
+                        ],
+                        if (phone.isNotEmpty) ...[
+                          if (email.isNotEmpty) const _ProfileDivider(),
+                          _ProfileInfoRow(
+                            icon: Icons.phone_outlined,
+                            iconBg: const Color(0xFFECFDF5),
+                            iconColor: const Color(0xFF059669),
+                            label: 'Phone Number',
+                            value: phone,
+                          ),
+                        ],
+                        if (address.isNotEmpty) ...[
+                          if (email.isNotEmpty || phone.isNotEmpty)
+                            const _ProfileDivider(),
+                          _ProfileInfoRow(
+                            icon: Icons.location_on_outlined,
+                            iconBg: const Color(0xFFFFF1F2),
+                            iconColor: const Color(0xFFE11D48),
+                            label: 'Office Address',
+                            value: address,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+
+                    // 5. Sign Out Card matching Drawer
+                    _buildSignOutTile(context),
                   ],
                 ),
               ),
             ),
     );
   }
+
+  Widget _buildProfileHeroCard(String empCode) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              // Avatar Squircle matching Dashboard & Drawer
+              Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.22),
+                    width: 1.5,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _userAvatarLetter,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // Name & Designation
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _userName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _userDesignation,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Badge (Employee Code)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.18),
+                        ),
+                      ),
+                      child: Text(
+                        empCode,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricsRow() {
+    final attendance = _employeeDetails?.attendanceForTheMonth ?? 0;
+    final leaves = _employeeDetails?.noOfLeavesForTheMonth ?? 0;
+    final claims = _employeeDetails?.thisPendingMonthClaimAmount ?? 0.0;
+
+    return Row(
+      children: [
+        Expanded(
+          child: _buildMetricTile(
+            title: '$attendance',
+            unit: 'Days',
+            subtitle: 'Attendance',
+            icon: Icons.event_available_rounded,
+            iconColor: const Color(0xFF059669),
+            iconBg: const Color(0xFFECFDF5),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildMetricTile(
+            title: '$leaves',
+            unit: 'Days',
+            subtitle: 'Leaves',
+            icon: Icons.flight_takeoff_rounded,
+            iconColor: const Color(0xFFD97706),
+            iconBg: const Color(0xFFFEF3C7),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildMetricTile(
+            title: claims > 0 ? '₹${claims.toInt()}' : '₹0',
+            unit: '',
+            subtitle: 'Claims',
+            icon: Icons.receipt_long_rounded,
+            iconColor: const Color(0xFF7C3AED),
+            iconBg: const Color(0xFFEDE9FE),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetricTile({
+    required String title,
+    required String unit,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: iconColor, size: 16),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              if (unit.isNotEmpty) ...[
+                const SizedBox(width: 3),
+                Text(
+                  unit,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF94A3B8),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 1),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildSignOutTile(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _handleLogout(context),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF2F2),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFFEE2E2)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: Color(0xFFDC2626),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF991B1B),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'End current session securely',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Color(0xFFB91C1C),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFFEF4444),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4.0),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.8,
+          color: Color(0xFF94A3B8),
+        ),
+      ),
+    );
+  }
 }
 
-class _WebProfileRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
+class _ProfileGroupCard extends StatelessWidget {
+  final List<Widget> children;
+  const _ProfileGroupCard({required this.children});
 
-  const _WebProfileRow({
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(children: children),
+    );
+  }
+}
+
+class _ProfileInfoRow extends StatelessWidget {
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String label;
+  final String value;
+
+  const _ProfileInfoRow({
     required this.icon,
-    required this.text,
+    required this.iconBg,
+    required this.iconColor,
+    required this.label,
+    required this.value,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 18.0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            size: 22,
-            color: const Color(0xFF2563EB),
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF1E293B),
-                fontWeight: FontWeight.w500,
-                height: 1.35,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ProfileDivider extends StatelessWidget {
+  const _ProfileDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Divider(
+      height: 1,
+      thickness: 1,
+      indent: 64,
+      endIndent: 14,
+      color: Color(0xFFF1F5F9),
     );
   }
 }

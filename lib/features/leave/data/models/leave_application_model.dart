@@ -35,6 +35,50 @@ class LeaveApplicationModel {
     );
   }
 
+  String get formattedStatus {
+    switch (status.trim().toUpperCase()) {
+      case 'A':
+      case 'APPROVED':
+      case 'APPROVE':
+        return 'Approved';
+      case 'R':
+      case 'REJECTED':
+      case 'REJECT':
+        return 'Rejected';
+      case 'F':
+      case 'FORWARD':
+      case 'FORWARDED':
+        return 'Forwarded';
+      case 'N':
+      case 'P':
+      case 'PENDING':
+        return 'Pending';
+      default:
+        return status.isNotEmpty ? status : 'Pending';
+    }
+  }
+
+  bool get isApproved {
+    final s = status.trim().toUpperCase();
+    return s == 'A' || s == 'APPROVED' || s == 'APPROVE';
+  }
+
+  bool get isPending {
+    final s = status.trim().toUpperCase();
+    return s == 'N' ||
+        s == 'P' ||
+        s == 'PENDING' ||
+        s == 'FORWARD' ||
+        s == 'FORWARDED' ||
+        s == 'F' ||
+        s.isEmpty;
+  }
+
+  bool get isRejected {
+    final s = status.trim().toUpperCase();
+    return s == 'R' || s == 'REJECTED' || s == 'REJECT';
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'Key': key,

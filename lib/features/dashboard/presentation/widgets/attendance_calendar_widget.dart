@@ -54,15 +54,15 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
                 color: Colors.transparent,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
+                    horizontal: 12,
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFF131B2E),
+                    borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
+                        color: Colors.black.withValues(alpha: 0.25),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -73,7 +73,7 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'In: ${details['inTime'] ?? 'Ab'}',
+                        'In: ${details['inTime'] ?? '--:--'}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 11,
@@ -82,18 +82,18 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Out: ${details['outTime'] ?? 'Ab'}',
+                        'Out: ${details['outTime'] ?? '--:--'}',
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: Colors.white70,
                           fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Status: ${details['present'] ?? 'Ab'}',
                         style: const TextStyle(
-                          color: Color(0xFFFACC15),
+                          color: Color(0xFF6CF8BB),
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -118,7 +118,8 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final focusedMonth = widget.selectedDate ?? DateTime.now();
+    final now = DateTime.now();
+    final focusedMonth = widget.selectedDate ?? now;
     final monthName = DateFormat('MMMM yyyy').format(focusedMonth);
     final daysInMonth = DateUtils.getDaysInMonth(
       focusedMonth.year,
@@ -127,48 +128,103 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
     final firstDayOfWeek =
         DateTime(focusedMonth.year, focusedMonth.month, 1).weekday % 7;
 
+    // Previous month trailing days
+    final prevMonthDate = DateTime(focusedMonth.year, focusedMonth.month - 1);
+    final prevMonthTotalDays = DateUtils.getDaysInMonth(
+      prevMonthDate.year,
+      prevMonthDate.month,
+    );
+
     final activeStatusMap = widget.liveDayStatus ?? {};
     final activeDetailsMap = widget.liveDayDetails ?? {};
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.cardBorder),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 1. Calendar Header with Chevrons and Legend
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                monthName,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
+              Row(
+                children: [
+                  Text(
+                    monthName,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      final prev = DateTime(
+                        focusedMonth.year,
+                        focusedMonth.month - 1,
+                        1,
+                      );
+                      widget.onDateSelected?.call(prev);
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.all(4.0),
+                      child: Icon(
+                        Icons.chevron_left_rounded,
+                        size: 18,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      final next = DateTime(
+                        focusedMonth.year,
+                        focusedMonth.month + 1,
+                        1,
+                      );
+                      widget.onDateSelected?.call(next);
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.all(4.0),
+                      child: Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               Row(
                 children: [
-                  _legendItem(color: Colors.green, label: 'Present'),
-                  const SizedBox(width: 8),
-                  _legendItem(color: Colors.red, label: 'Absent/Leave'),
+                  _legendItem(color: AppColors.secondary, label: 'Present'),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          // Day Headers (Sun - Sat)
+          const SizedBox(height: 14),
+
+          // 2. Weekday Headers (Sun - Sat)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -177,10 +233,10 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
                     child: Center(
                       child: Text(
                         day,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textMuted,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                     ),
@@ -188,25 +244,43 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
                 )
                 .toList(),
           ),
-          const SizedBox(height: 8),
-          // Days Grid
+          const SizedBox(height: 10),
+
+          // 3. Days Grid
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: firstDayOfWeek + daysInMonth,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 7,
-              childAspectRatio: 1.1,
-              crossAxisSpacing: 4,
+              childAspectRatio: 1.05,
+              crossAxisSpacing: 2,
               mainAxisSpacing: 4,
             ),
             itemBuilder: (context, index) {
               if (index < firstDayOfWeek) {
-                return const SizedBox.shrink();
+                final prevDayNumber =
+                    prevMonthTotalDays - firstDayOfWeek + index + 1;
+                return Center(
+                  child: Text(
+                    '$prevDayNumber',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textMuted.withValues(alpha: 0.35),
+                    ),
+                  ),
+                );
               }
+
               final dayNumber = index - firstDayOfWeek + 1;
               final statusColor = activeStatusMap[dayNumber];
               final details = activeDetailsMap[dayNumber];
+
+              final isToday =
+                  now.year == focusedMonth.year &&
+                  now.month == focusedMonth.month &&
+                  now.day == dayNumber;
 
               final isSelected =
                   widget.selectedDate != null &&
@@ -214,78 +288,77 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
                   widget.selectedDate!.month == focusedMonth.month &&
                   widget.selectedDate!.day == dayNumber;
 
-              final tooltipText = details != null
-                  ? "In: ${details['inTime']}\nOut: ${details['outTime']}\nStatus: ${details['present']}"
-                  : (statusColor != null
-                        ? (statusColor == Colors.green ? 'Present' : 'Absent')
-                        : 'Day $dayNumber');
-
-              return Tooltip(
-                message: tooltipText,
-                child: Builder(
-                  builder: (cellContext) {
-                    return GestureDetector(
-                      onTap: () {
-                        if (details != null) {
-                          _showDayTooltip(cellContext, dayNumber, details);
-                        }
-                        widget.onDateSelected?.call(
-                          DateTime(
-                            focusedMonth.year,
-                            focusedMonth.month,
-                            dayNumber,
+              return Builder(
+                builder: (cellContext) {
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      if (details != null) {
+                        _showDayTooltip(cellContext, dayNumber, details);
+                      }
+                      widget.onDateSelected?.call(
+                        DateTime(
+                          focusedMonth.year,
+                          focusedMonth.month,
+                          dayNumber,
+                        ),
+                      );
+                    },
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: isToday
+                                ? AppColors.primary
+                                : (isSelected
+                                      ? AppColors.primary.withValues(
+                                          alpha: 0.12,
+                                        )
+                                      : Colors.transparent),
+                            shape: BoxShape.circle,
                           ),
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primary.withValues(alpha: 0.12)
-                              : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(6),
-                          border: isSelected
-                              ? Border.all(color: AppColors.primary, width: 1.5)
-                              : null,
-                        ),
-                        child: Row(
-                          children: [
-                            if (statusColor != null)
-                              Container(
-                                width: 3,
-                                decoration: BoxDecoration(
-                                  color: statusColor,
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(6),
-                                    bottomLeft: Radius.circular(6),
-                                  ),
-                                ),
-                              )
-                            else
-                              const SizedBox(width: 3),
-                            Expanded(
-                              child: Center(
-                                child: Text(
-                                  '$dayNumber',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.w500,
-                                    color: isSelected
+                          alignment: Alignment.center,
+                          child: Text(
+                            '$dayNumber',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: (isToday || isSelected)
+                                  ? FontWeight.bold
+                                  : FontWeight.w600,
+                              color: isToday
+                                  ? Colors.white
+                                  : (isSelected
                                         ? AppColors.primary
-                                        : (statusColor != null
-                                              ? AppColors.textPrimary
-                                              : AppColors.textSecondary),
-                                  ),
-                                ),
-                              ),
+                                        : AppColors.textPrimary),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                        const SizedBox(height: 2),
+                        // Status Indicator Dot
+                        if (statusColor != null)
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: (statusColor == Colors.green ||
+                                      statusColor == AppColors.secondary)
+                                  ? AppColors.secondary
+                                  : (statusColor == Colors.red ||
+                                          statusColor == AppColors.error)
+                                      ? AppColors.error
+                                      : statusColor,
+                              shape: BoxShape.circle,
+                            ),
+                          )
+                        else
+                          const SizedBox(height: 6),
+                      ],
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -296,16 +369,21 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
 
   Widget _legendItem({required Color color, required String label}) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 8,
           height: 8,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 5),
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
         ),
       ],
     );

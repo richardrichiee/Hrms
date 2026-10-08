@@ -278,6 +278,25 @@ class AppUrls {
     final time = timestamp;
     return '${baseUrl}api/HRM/Attendance/v1/Save/$id/$userId/$time/$accessPoint';
   }
+
+  /// Endpoint: POST /api/HRM/ChangePassWord/v1/Save/{id}/{UserID}/{timeStamp}/{accessPoint}
+  static String getChangePasswordSaveUrl({
+    required int id,
+    required int userId,
+    required String accessPoint,
+  }) {
+    final time = timestamp;
+    return '${baseUrl}api/HRM/ChangePassWord/v1/Save/$id/$userId/$time/$accessPoint';
+  }
+
+  /// Endpoint: GET /api/HRM/ChangePassWord/v1/Details/{id}/{timeStamp}/{accessPoint}
+  static String getChangePasswordDetailsUrl({
+    required int id,
+    required String accessPoint,
+  }) {
+    final time = timestamp;
+    return '${baseUrl}api/HRM/ChangePassWord/v1/Details/$id/$time/$accessPoint';
+  }
 }
 
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../auth/data/models/user_rights_model.dart';
+import '../../../auth/data/services/user_rights_service.dart';
 import '../../data/services/leave_service.dart';
 
 class ApplyLeaveDialog extends StatefulWidget {
@@ -14,8 +16,10 @@ class ApplyLeaveDialog extends StatefulWidget {
 
 class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
   final _leaveService = LeaveService();
+  final _userRightsService = UserRightsService();
   final _reasonController = TextEditingController();
 
+  UserRightsModel? _userRights;
   late String _selectedLeaveId; // 1 = Casual Leave, 2 = Sick Leave
   String _selectedLeaveType = '1'; // 1 = Full Day, 2 = Half Day
 
@@ -30,7 +34,19 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
   void initState() {
     super.initState();
     _selectedLeaveId = widget.initialLeaveId ?? '1';
+    _loadUserRights();
     _triggerCalculation();
+  }
+
+  Future<void> _loadUserRights() async {
+    try {
+      final rights = await _userRightsService.fetchUserRights(menuCode: 19);
+      if (mounted) {
+        setState(() {
+          _userRights = rights;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -104,6 +120,8 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
     final fromStr = DateFormat('yyyy-MM-dd').format(_fromDate);
     final toStr = DateFormat('yyyy-MM-dd').format(_toDate);
 
+    final isApproverLevel3 = _userRights?.transactions == 3;
+
     final success = await _leaveService.saveLeaveApplication(
       leaveId: _selectedLeaveId,
       leaveType: _selectedLeaveType,
@@ -111,6 +129,7 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
       toDate: toStr,
       noOfLeaves: _calculatedDays.toString(),
       reason: reason,
+      approvalStatus: isApproverLevel3 ? 'A' : 'N',
     );
 
     if (mounted) {
@@ -417,12 +436,17 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
                 maxLines: 2,
                 decoration: const InputDecoration(hintText: 'Enter reason'),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
+
+              const SizedBox(height: 8),
 
               // Submit Action Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
                   onPressed: _isSubmitting ? null : _submitLeaveApplication,
                   child: _isSubmitting
                       ? const SizedBox(
@@ -433,7 +457,14 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
                             strokeWidth: 2,
                           ),
                         )
-                      : const Text('Submit Application'),
+                      : const Text(
+                          'Submit',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
             ],

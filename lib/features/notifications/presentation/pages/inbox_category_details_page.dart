@@ -53,6 +53,57 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
     final list = results[0] as List<Map<String, dynamic>>;
     final rights = results[1] as UserRightsModel?;
 
+    final isLeave = widget.menuCode == '19' ||
+        widget.title.toLowerCase().contains('leave') ||
+        list.any((i) => i.containsKey('LeaveType'));
+
+    final isClaim = widget.menuCode == '15' ||
+        widget.title.toLowerCase().contains('claim') ||
+        list.any((i) => i.containsKey('ClaimNumber') || i.containsKey('ClaimDate'));
+
+    if (isLeave && list.isNotEmpty) {
+      await Future.wait(
+        list.map((item) async {
+          final id = int.tryParse(item['Key']?.toString() ?? item['ID']?.toString() ?? '0') ?? 0;
+          if (id > 0) {
+            try {
+              final leaveDetails = await _leaveService.fetchLeaveApplicationDetails(id);
+              if (leaveDetails != null && leaveDetails.reason.trim().isNotEmpty) {
+                item['Reason'] = leaveDetails.reason.trim();
+              }
+            } catch (_) {}
+          }
+        }),
+      );
+    } else if (isClaim && list.isNotEmpty) {
+      await Future.wait(
+        list.map((item) async {
+          final id = int.tryParse(item['Key']?.toString() ?? item['ID']?.toString() ?? '0') ?? 0;
+          if (id > 0) {
+            try {
+              final claimDetails = await _claimService.fetchClaimRawDetails(id);
+              if (claimDetails != null) {
+                final table = claimDetails['Table'] as List?;
+                final table1 = claimDetails['Table1'] as List?;
+                final remarks = (table != null && table.isNotEmpty)
+                    ? table[0]['Remarks']?.toString()
+                    : null;
+                final reason1 = (table1 != null && table1.isNotEmpty)
+                    ? table1[0]['Reason']?.toString()
+                    : null;
+                final reason = (remarks != null && remarks.isNotEmpty)
+                    ? remarks
+                    : (reason1 ?? '');
+                if (reason.isNotEmpty) {
+                  item['Reason'] = reason;
+                }
+              }
+            } catch (_) {}
+          }
+        }),
+      );
+    }
+
     if (mounted) {
       setState(() {
         _userRights = rights;
@@ -64,9 +115,9 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
                 item['Name']?.toString() ??
                 item['UserName']?.toString() ??
                 'Applicant';
-            final rawDetails = item['Details']?.toString() ??
-                item['Reason']?.toString() ??
+            final rawDetails = item['Reason']?.toString() ??
                 item['Remarks']?.toString() ??
+                item['Details']?.toString() ??
                 '';
             final cleanDetails =
                 (rawDetails.contains('.aspx') || rawDetails.startsWith('..'))
@@ -149,8 +200,49 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
             Text('$actionTitle Request'),
           ],
         ),
-        content: Text(
-          'Are you sure you want to $actionTitle request #$id for ${currentItem['applicant']}?',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to $actionTitle request #$id for ${currentItem['applicant']}?',
+            ),
+            if (currentItem['reason'] != null &&
+                (currentItem['reason'] as String).trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.cardBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Reason:',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      currentItem['reason'] as String,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
         actions: [
           TextButton(
@@ -210,11 +302,7 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
     if (mounted) {
       setState(() {
         _processingIds.remove(id);
-        currentItem['status'] = action == 'A'
-            ? 'Approved'
-            : action == 'F'
-                ? 'Forwarded'
-                : 'Rejected';
+        _items.removeWhere((element) => element['id'] == id);
       });
 
       messenger.showSnackBar(
@@ -396,8 +484,75 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
                                 ),
                               if (item['branch'] != null && (item['branch'] as String).isNotEmpty)
                                 _DetailInfoRow(label: 'Branch', value: item['branch'] as String),
-                              if (item['reason'] != null && (item['reason'] as String).isNotEmpty)
-                                _DetailInfoRow(label: 'Details', value: item['reason'] as String),
+                              Builder(
+                                builder: (context) {
+                                  final isLeaveCategory = widget.menuCode == '19' ||
+                                      widget.title.toLowerCase().contains('leave') ||
+                                      (item['type'] != null &&
+                                          item['type'].toString().toLowerCase().contains('day'));
+                                  final reasonVal = (item['reason'] as String?)?.trim() ?? '';
+
+                                  return Container(
+                                    width: double.infinity,
+                                    margin: const EdgeInsets.only(top: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Padding(
+                                          padding: EdgeInsets.only(top: 2),
+                                          child: Icon(
+                                            Icons.notes_rounded,
+                                            size: 16,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                isLeaveCategory ? 'Reason for Leave' : 'Remarks / Reason',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.textMuted,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                reasonVal.isNotEmpty
+                                                    ? reasonVal
+                                                    : 'No reason specified',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                  fontStyle: reasonVal.isEmpty
+                                                      ? FontStyle.italic
+                                                      : FontStyle.normal,
+                                                  color: reasonVal.isEmpty
+                                                      ? AppColors.textMuted
+                                                      : AppColors.textPrimary,
+                                                  height: 1.3,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
 
                               if (isPending) ...[
                                 const SizedBox(height: 16),

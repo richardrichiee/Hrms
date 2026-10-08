@@ -3,292 +3,241 @@ import '../../../../app/theme/app_theme.dart';
 
 class DashboardMetrics extends StatelessWidget {
   final int attendanceCount;
-  final String inTime;
   final num leavesTakenCount;
-  final bool isCheckedIn;
-  final bool isCheckedOut;
-  final VoidCallback? onInTimeCardTap;
 
   const DashboardMetrics({
     super.key,
     this.attendanceCount = 0,
-    this.inTime = '09:30 AM',
     this.leavesTakenCount = 0,
-    this.isCheckedIn = false,
-    this.isCheckedOut = false,
-    this.onInTimeCardTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Symmetrical 2-Column Row for Monthly Metrics
-        Row(
-          children: [
-            Expanded(
-              child: _StatCard(
-                value: '$attendanceCount',
-                unit: 'Days',
-                label: 'Attendance',
-                sublabel: 'For The Month',
-                icon: Icons.calendar_month_outlined,
-                iconColor: const Color(0xFF3B82F6),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _StatCard(
-                value: (leavesTakenCount % 1 == 0)
-                    ? leavesTakenCount.toInt().toString()
-                    : leavesTakenCount.toStringAsFixed(1),
-                unit: 'Days',
-                label: 'Leaves Taken',
-                sublabel: 'For The Month',
-                icon: Icons.event_busy_outlined,
-                iconColor: const Color(0xFFF59E0B),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
+    // Calculate realistic attendance rate for the current month so far
+    final today = DateTime.now().day;
+    final rate = today > 0
+        ? ((attendanceCount / today) * 100).clamp(0, 100).toStringAsFixed(1)
+        : '100.0';
 
-        // Sleek Today's In-Time Status Bar (Interactive to view full punch history)
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onInTimeCardTap,
-            borderRadius: BorderRadius.circular(14),
+    final leavesFormatted = (leavesTakenCount % 1 == 0)
+        ? leavesTakenCount.toInt().toString()
+        : leavesTakenCount.toStringAsFixed(1);
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Attendance Card
+          Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: AppColors.cardBorder),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.06),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
                   ),
                 ],
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        width: 38,
+                        height: 38,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
+                          color: AppColors.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
-                          Icons.access_time_rounded,
-                          color: Color(0xFF10B981),
+                          Icons.calendar_today_rounded,
+                          color: AppColors.primary,
                           size: 20,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text(
-                                "Today's In Time",
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textMuted,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              if (onInTimeCardTap != null) ...[
-                                const SizedBox(width: 4),
-                                const Icon(
-                                  Icons.history_rounded,
-                                  size: 13,
-                                  color: AppColors.primary,
-                                ),
-                              ],
-                            ],
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
                           ),
-                          Text(
-                            inTime,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
+                          decoration: BoxDecoration(
+                            color: AppColors.secondaryContainer.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '$rate%',
+                              maxLines: 1,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.secondary,
+                              ),
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
-                  Row(
+                  const SizedBox(height: 14),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isCheckedIn
-                              ? Colors.green.withValues(alpha: 0.1)
-                              : isCheckedOut
-                              ? Colors.orange.withValues(alpha: 0.12)
-                              : Colors.grey.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: isCheckedIn
-                                    ? Colors.green
-                                    : isCheckedOut
-                                    ? Colors.orange.shade700
-                                    : Colors.grey.shade600,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              isCheckedIn
-                                  ? 'Checked In'
-                                  : isCheckedOut
-                                  ? 'Checked Out'
-                                  : 'Not Checked In',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: isCheckedIn
-                                    ? Colors.green.shade800
-                                    : isCheckedOut
-                                    ? Colors.orange.shade800
-                                    : Colors.grey.shade700,
-                              ),
-                            ),
-                          ],
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '$attendanceCount Days',
+                          maxLines: 1,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                            letterSpacing: -0.5,
+                          ),
                         ),
                       ),
-                      if (onInTimeCardTap != null) ...[
-                        const SizedBox(width: 6),
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          size: 18,
-                          color: AppColors.textMuted,
+                      const SizedBox(height: 2),
+                      const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Attendance This Month',
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textMuted,
+                          ),
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
           ),
-        ),
-      ],
-    );
-  }
-}
+          const SizedBox(width: 12),
 
-class _StatCard extends StatelessWidget {
-  final String value;
-  final String unit;
-  final String label;
-  final String sublabel;
-  final IconData icon;
-  final Color iconColor;
-
-  const _StatCard({
-    required this.value,
-    required this.unit,
-    required this.label,
-    required this.sublabel,
-    required this.icon,
-    required this.iconColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.cardBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
+          // 2. Leaves Card
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      value,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      unit,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.cardBorder),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.06),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
                   ),
-                ),
-                Text(
-                  sublabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textMuted,
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
                   ),
-                ),
-              ],
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.beach_access_rounded,
+                          color: AppColors.tertiary,
+                          size: 20,
+                        ),
+                      ),
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Leaves',
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.tertiary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '$leavesFormatted Days',
+                          maxLines: 1,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Leaves Taken This Month',
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: iconColor, size: 20),
           ),
         ],
       ),

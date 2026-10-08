@@ -132,9 +132,11 @@ class AttendanceService {
     required int branchId,
     required int employeeId,
     required String inOutTime,
-    required int timeFlag, // 1 = Check In, 0 = Check Out
+    required int timeFlag, // 0 = Check In, 1 = Check Out
     required String date, // dd/MM/yyyy
     String? reason,
+    String? inTime,
+    String? outTime,
   }) async {
     try {
       final accessPoint =
@@ -152,13 +154,19 @@ class AttendanceService {
           "BranchID": branchId.toString(),
           "Date": date,
         },
-        "Tail": [],
+        "Tail": [
+          {
+            "EmployeeID": employeeId.toString(),
+            "InTime": inTime ?? (timeFlag == 0 ? inOutTime : ""),
+            "OutTime": outTime ?? (timeFlag == 1 ? inOutTime : ""),
+          }
+        ],
         "Tail2": [
           {
             "EmployeeID": employeeId.toString(),
             "InOutTime": inOutTime,
             "Reason": reason ??
-                (timeFlag == 1 ? "Mobile Check In" : "Mobile Check Out"),
+                (timeFlag == 0 ? "Mobile Check In" : "Mobile Check Out"),
             "TimeFlag": timeFlag.toString(),
           }
         ]

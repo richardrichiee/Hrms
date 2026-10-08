@@ -4,6 +4,8 @@ import '../../../../app/theme/app_theme.dart';
 import '../../../../core/storage/local_storage_service.dart';
 import '../../../auth/data/models/user_rights_model.dart';
 import '../../../auth/data/services/user_rights_service.dart';
+import '../../../profile/data/models/employee_details_model.dart';
+import '../../../profile/data/services/employee_service.dart';
 import '../../data/models/leave_application_model.dart';
 import '../../data/models/leave_details_model.dart';
 import '../../data/services/leave_service.dart';
@@ -19,12 +21,11 @@ class LeavePage extends StatefulWidget {
 class _LeavePageState extends State<LeavePage> {
   final _leaveService = LeaveService();
   final _userRightsService = UserRightsService();
+  final _employeeService = EmployeeService();
 
-  List<LeaveApplicationModel> _allLeaveApplications = [];
+  List<LeaveApplicationModel> _leaveApplications = [];
   UserRightsModel? _userRights;
-  String _currentUserName = '';
   bool _isLoading = true;
-  int _selectedTabIndex = 0; // 0 = All, 1 = To Approve, 2 = My Leaves
 
   DateTime? _filterStartDate;
   DateTime? _filterEndDate;
@@ -37,26 +38,48 @@ class _LeavePageState extends State<LeavePage> {
 
   Future<void> _loadLeaveData() async {
     setState(() => _isLoading = true);
-    final rights = await _userRightsService.fetchUserRights(menuCode: 19);
     final user = await LocalStorageService.getUser();
+    final rights = await _userRightsService.fetchUserRights(menuCode: 19);
 
-    // Fetch all leave applications assigned to this user (approver list + own leaves)
-    var list = await _leaveService.fetchLeaveApplications();
-    if (list.isEmpty) {
-      list = await _leaveService.searchEmployeeLeaves();
-    }
+    final results = await Future.wait([
+      _leaveService.fetchLeaveApplications(),
+      _employeeService.fetchEmployeeDashboard(),
+    ]);
+
+    final allApps = results[0] as List<LeaveApplicationModel>;
+    final empDetails = results[1] as EmployeeDetailsModel?;
+
+    final currentUserName = (empDetails != null && empDetails.name.isNotEmpty)
+        ? empDetails.name
+        : (user?.userName ?? '');
+
+    // Filter to show ONLY the logged-in user's own leave applications
+    final myLeaves = allApps.where((item) {
+      return _isCurrentUser(item.employee, currentUserName);
+    }).toList();
 
     // Sort descending by key so the most recent applications appear first
-    list.sort((a, b) => b.key.compareTo(a.key));
+    myLeaves.sort((a, b) => b.key.compareTo(a.key));
 
     if (mounted) {
       setState(() {
         _userRights = rights;
-        _currentUserName = user?.userName ?? '';
-        _allLeaveApplications = list;
+        _leaveApplications = myLeaves;
         _isLoading = false;
       });
     }
+  }
+
+  bool _isCurrentUser(String employeeName, String currentUserName) {
+    if (currentUserName.trim().isEmpty) return true;
+    final cleanEmp =
+        employeeName.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+    final cleanUser =
+        currentUserName.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+    if (cleanEmp.isEmpty || cleanUser.isEmpty) return false;
+    return cleanEmp == cleanUser ||
+        cleanEmp.contains(cleanUser) ||
+        cleanUser.contains(cleanEmp);
   }
 
   DateTime? _parseLeaveDate(String dateStr) {
@@ -72,26 +95,53 @@ class _LeavePageState extends State<LeavePage> {
     return DateTime.tryParse(dateStr);
   }
 
-  int get _pendingApprovalsCount {
-    return _allLeaveApplications.where((item) {
-      final isOwn = _currentUserName.isNotEmpty &&
-          item.employee.toLowerCase().contains(_currentUserName.toLowerCase());
-      final isForward = item.status.toLowerCase() == 'forward' ||
-          item.status.toLowerCase() == 'pending';
-      return isForward && !isOwn;
-    }).length;
+  String _formatStatus(String? rawStatus) {
+    if (rawStatus == null || rawStatus.isEmpty) return 'Pending';
+    final s = rawStatus.trim().toUpperCase();
+    if (s == 'A' || s == 'APPROVED' || s == 'APPROVE') return 'Approved';
+    if (s == 'R' || s == 'REJECTED' || s == 'REJECT') return 'Rejected';
+    if (s == 'F' || s == 'FORWARD' || s == 'FORWARDED') return 'Forwarded';
+    if (s == 'N' || s == 'P' || s == 'PENDING') return 'Pending';
+    return rawStatus;
   }
 
-  int get _myLeavesCount {
-    return _allLeaveApplications.where((item) {
-      return _currentUserName.isNotEmpty &&
-          item.employee.toLowerCase().contains(_currentUserName.toLowerCase());
-    }).length;
+  Color _getStatusBg(String? status) {
+    final s = (status ?? '').trim().toUpperCase();
+    if (s == 'A' || s == 'APPROVED' || s == 'APPROVE') {
+      return Colors.green.withValues(alpha: 0.1);
+    } else if (s == 'R' || s == 'REJECTED' || s == 'REJECT') {
+      return Colors.red.withValues(alpha: 0.1);
+    } else if (s == 'F' || s == 'FORWARD' || s == 'FORWARDED') {
+      return Colors.blue.withValues(alpha: 0.1);
+    }
+    return Colors.orange.withValues(alpha: 0.1);
+  }
+
+  Color _getStatusColor(String? status) {
+    final s = (status ?? '').trim().toUpperCase();
+    if (s == 'A' || s == 'APPROVED' || s == 'APPROVE') {
+      return Colors.green;
+    } else if (s == 'R' || s == 'REJECTED' || s == 'REJECT') {
+      return Colors.red;
+    } else if (s == 'F' || s == 'FORWARD' || s == 'FORWARDED') {
+      return Colors.blue;
+    }
+    return Colors.orange;
+  }
+
+  bool _isStatusPending(String? status) {
+    final s = (status ?? '').trim().toUpperCase();
+    return s == 'N' ||
+        s == 'P' ||
+        s == 'PENDING' ||
+        s == 'FORWARD' ||
+        s == 'FORWARDED' ||
+        s == 'F' ||
+        s.isEmpty;
   }
 
   List<LeaveApplicationModel> get _filteredApplications {
-    return _allLeaveApplications.where((item) {
-      // 1. Date filter
+    return _leaveApplications.where((item) {
       if (_filterStartDate != null || _filterEndDate != null) {
         final from = _parseLeaveDate(item.fromDate);
         final to = _parseLeaveDate(item.toDate) ?? from;
@@ -117,87 +167,8 @@ class _LeavePageState extends State<LeavePage> {
           }
         }
       }
-
-      // 2. Tab filter
-      final isOwn = _currentUserName.isNotEmpty &&
-          item.employee.toLowerCase().contains(_currentUserName.toLowerCase());
-      final isForward = item.status.toLowerCase() == 'forward' ||
-          item.status.toLowerCase() == 'pending';
-
-      if (_selectedTabIndex == 1) {
-        // "To Approve": Forward / Pending leaves from team members
-        return isForward && !isOwn;
-      } else if (_selectedTabIndex == 2) {
-        // "My Leaves": Leaves applied by the logged-in user
-        return isOwn;
-      }
-      return true; // "All"
+      return true;
     }).toList();
-  }
-
-  Future<void> _handleApproveOrForward(
-      LeaveApplicationModel item, String status) async {
-    final actionName = status == 'A' ? 'Approve' : 'Forward';
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(
-              status == 'A'
-                  ? Icons.check_circle_outline_rounded
-                  : Icons.forward_rounded,
-              color: status == 'A' ? Colors.green : AppColors.primary,
-            ),
-            const SizedBox(width: 8),
-            Text('$actionName Leave'),
-          ],
-        ),
-        content: Text(
-            'Are you sure you want to $actionName leave application #${item.key} for ${item.employee}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  status == 'A' ? Colors.green : AppColors.primary,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(actionName),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true || !mounted) return;
-
-    final messenger = ScaffoldMessenger.of(context);
-    final success = await _leaveService.approveOrForwardLeave(
-      key: item.key,
-      approvalStatus: status,
-    );
-
-    if (mounted && success) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-              'Leave #${item.key} (${item.employee}) marked as $actionName!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      _loadLeaveData();
-    } else if (mounted) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Failed to $actionName leave application #${item.key}.'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    }
   }
 
   void _navigateToApplyLeave() {
@@ -374,7 +345,7 @@ class _LeavePageState extends State<LeavePage> {
                     width: double.infinity,
                     height: 44,
                     child: ElevatedButton(
-                       style: ElevatedButton.styleFrom(
+                      style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -425,38 +396,20 @@ class _LeavePageState extends State<LeavePage> {
             }
 
             final details = snapshot.data;
-            final approvalStatus = summaryItem.status.isNotEmpty
+            final rawStatus = summaryItem.status.isNotEmpty
                 ? summaryItem.status
-                : (details?.approvalStatusText ?? 'Approved');
+                : (details?.approvalStatusText ?? 'Pending');
+            final approvalStatus = _formatStatus(rawStatus);
             final reason = summaryItem.reason.isNotEmpty
                 ? summaryItem.reason
                 : (details?.reason ?? 'N/A');
             final noOfLeaves = summaryItem.noOfLeaves > 0
                 ? summaryItem.noOfLeaves
                 : (details?.noOfLeaves ?? 1.0);
-            final empId = details?.empId ?? 26;
 
-            final isOwnLeave = _currentUserName.isNotEmpty &&
-                summaryItem.employee
-                    .toLowerCase()
-                    .contains(_currentUserName.toLowerCase());
-            final isPending = approvalStatus.toLowerCase() == 'forward' ||
-                approvalStatus.toLowerCase() == 'pending' ||
-                summaryItem.status.toLowerCase() == 'forward' ||
-                summaryItem.status.toLowerCase() == 'pending';
-
-            Color statusBgColor = Colors.green.withValues(alpha: 0.1);
-            Color statusTextColor = Colors.green;
-            if (approvalStatus.toLowerCase() == 'pending') {
-              statusBgColor = Colors.orange.withValues(alpha: 0.1);
-              statusTextColor = Colors.orange;
-            } else if (approvalStatus.toLowerCase() == 'rejected') {
-              statusBgColor = Colors.red.withValues(alpha: 0.1);
-              statusTextColor = Colors.red;
-            } else if (approvalStatus.toLowerCase() == 'forward') {
-              statusBgColor = Colors.blue.withValues(alpha: 0.1);
-              statusTextColor = Colors.blue;
-            }
+            final isPending = _isStatusPending(rawStatus);
+            final statusBgColor = _getStatusBg(rawStatus);
+            final statusTextColor = _getStatusColor(rawStatus);
 
             return SafeArea(
               top: false,
@@ -503,7 +456,7 @@ class _LeavePageState extends State<LeavePage> {
                     const Divider(height: 24),
                     _DetailRow(
                       label: 'Applicant',
-                      value: '${summaryItem.employee} (ID: $empId)',
+                      value: summaryItem.employee,
                     ),
                     _DetailRow(
                       label: 'Leave Category',
@@ -511,7 +464,8 @@ class _LeavePageState extends State<LeavePage> {
                     ),
                     _DetailRow(
                       label: 'Leave Duration',
-                      value: '$noOfLeaves Days (${summaryItem.leaveType})',
+                      value:
+                          '$noOfLeaves ${(noOfLeaves == 1) ? "Day" : "Days"} (${summaryItem.leaveType})',
                     ),
                     _DetailRow(
                       label: 'From Date',
@@ -525,52 +479,8 @@ class _LeavePageState extends State<LeavePage> {
                       label: 'Reason',
                       value: reason.isNotEmpty ? reason : 'No reason specified',
                     ),
-                    const SizedBox(height: 8),
-                    if (isPending && !isOwnLeave) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              icon: const Icon(Icons.forward_rounded, size: 16),
-                              label: const Text('Forward'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.primary,
-                                side:
-                                    const BorderSide(color: AppColors.primary),
-                              ),
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _handleApproveOrForward(summaryItem, 'F');
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              icon: const Icon(
-                                  Icons.check_circle_outline_rounded,
-                                  size: 16),
-                              label: const Text('Approve'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                              ),
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _handleApproveOrForward(summaryItem, 'A');
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ),
-                    ] else if (isPending && isOwnLeave) ...[
+                    const SizedBox(height: 16),
+                    if (isPending) ...[
                       Row(
                         children: [
                           Expanded(
@@ -578,8 +488,47 @@ class _LeavePageState extends State<LeavePage> {
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.error,
                                 side: const BorderSide(color: AppColors.error),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                               onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(16)),
+                                    title: const Row(
+                                      children: [
+                                        Icon(Icons.warning_amber_rounded,
+                                            color: AppColors.error),
+                                        SizedBox(width: 8),
+                                        Text('Cancel Leave Request'),
+                                      ],
+                                    ),
+                                    content: Text(
+                                        'Are you sure you want to cancel leave application #${summaryItem.key}?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
+                                        child: const Text('Keep Leave'),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.error,
+                                        ),
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, true),
+                                        child: const Text('Yes, Cancel'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (confirm != true || !context.mounted) return;
+
                                 final messenger = ScaffoldMessenger.of(context);
                                 Navigator.pop(context);
                                 final success =
@@ -604,8 +553,15 @@ class _LeavePageState extends State<LeavePage> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
                               onPressed: () => Navigator.pop(context),
-                              child: const Text('Close'),
+                              child: const Text('Close',
+                                  style: TextStyle(color: Colors.white)),
                             ),
                           ),
                         ],
@@ -613,9 +569,17 @@ class _LeavePageState extends State<LeavePage> {
                     ] else ...[
                       SizedBox(
                         width: double.infinity,
+                        height: 44,
                         child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
                           onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
+                          child: const Text('Close',
+                              style: TextStyle(color: Colors.white)),
                         ),
                       ),
                     ],
@@ -730,24 +694,22 @@ class _LeavePageState extends State<LeavePage> {
         padding: EdgeInsets.only(
           left: 16.0,
           right: 16.0,
-          top: 10.0,
+          top: 14.0,
           bottom: MediaQuery.of(context).padding.bottom + 80,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Segmented Tabs: All, To Approve, My Leaves
-            _buildTabsBar(),
-
             if (_filterStartDate != null || _filterEndDate != null) ...[
               Container(
                 margin: const EdgeInsets.only(bottom: 14),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border:
-                      Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                  border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -781,18 +743,16 @@ class _LeavePageState extends State<LeavePage> {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
             ],
 
+            // Recent Leave Applications Section
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  _selectedTabIndex == 1
-                      ? 'Applications For Your Approval'
-                      : _selectedTabIndex == 2
-                          ? 'My Leave Applications'
-                          : 'Recent Leave Applications',
-                  style: const TextStyle(
+                const Text(
+                  'Recent Leave Applications',
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
@@ -817,17 +777,13 @@ class _LeavePageState extends State<LeavePage> {
                   border: Border.all(color: AppColors.cardBorder),
                 ),
                 child: Column(
-                  children: [
-                    const Icon(Icons.event_busy_rounded,
+                  children: const [
+                    Icon(Icons.event_busy_rounded,
                         size: 40, color: AppColors.textMuted),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
-                      _selectedTabIndex == 1
-                          ? 'No pending applications to approve'
-                          : _selectedTabIndex == 2
-                              ? 'No personal leave applications found'
-                              : 'No leave applications found',
-                      style: const TextStyle(color: AppColors.textMuted),
+                      'No leave applications found',
+                      style: TextStyle(color: AppColors.textMuted),
                     ),
                   ],
                 ),
@@ -841,23 +797,9 @@ class _LeavePageState extends State<LeavePage> {
                     const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final item = displayList[index];
-                  final isOwn = _currentUserName.isNotEmpty &&
-                      item.employee
-                          .toLowerCase()
-                          .contains(_currentUserName.toLowerCase());
-                  final statusLower = item.status.toLowerCase();
-                  Color statusBg = Colors.orange.withValues(alpha: 0.1);
-                  Color statusColor = Colors.orange;
-                  if (statusLower == 'approved') {
-                    statusBg = Colors.green.withValues(alpha: 0.1);
-                    statusColor = Colors.green;
-                  } else if (statusLower == 'rejected') {
-                    statusBg = Colors.red.withValues(alpha: 0.1);
-                    statusColor = Colors.red;
-                  } else if (statusLower == 'forward') {
-                    statusBg = Colors.blue.withValues(alpha: 0.1);
-                    statusColor = Colors.blue;
-                  }
+                  final statusText = _formatStatus(item.status);
+                  final statusBg = _getStatusBg(item.status);
+                  final statusColor = _getStatusColor(item.status);
 
                   return GestureDetector(
                     onTap: () => _showLeaveDetailsModal(item),
@@ -915,41 +857,14 @@ class _LeavePageState extends State<LeavePage> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Row(
-                                            children: [
-                                              Flexible(
-                                                child: Text(
-                                                  item.employee,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 15,
-                                                    color: AppColors.textPrimary,
-                                                  ),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              if (isOwn) ...[
-                                                const SizedBox(width: 6),
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(
-                                                      horizontal: 6, vertical: 1),
-                                                  decoration: BoxDecoration(
-                                                    color: AppColors.primary
-                                                        .withValues(alpha: 0.1),
-                                                    borderRadius:
-                                                        BorderRadius.circular(4),
-                                                  ),
-                                                  child: const Text(
-                                                    'You',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: AppColors.primary,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
+                                          Text(
+                                            item.employee,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
@@ -975,9 +890,7 @@ class _LeavePageState extends State<LeavePage> {
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  item.status.isNotEmpty
-                                      ? item.status
-                                      : 'Pending',
+                                  statusText,
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
@@ -987,7 +900,8 @@ class _LeavePageState extends State<LeavePage> {
                               ),
                             ],
                           ),
-                          const Divider(height: 20, color: AppColors.cardBorder),
+                          const Divider(
+                              height: 20, color: AppColors.cardBorder),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -1012,7 +926,8 @@ class _LeavePageState extends State<LeavePage> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.08),
+                                  color:
+                                      AppColors.primary.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -1046,90 +961,6 @@ class _LeavePageState extends State<LeavePage> {
               ),
             const SizedBox(height: 24),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabsBar() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Row(
-        children: [
-          _buildTabItem(0, 'All', _allLeaveApplications.length),
-          _buildTabItem(1, 'To Approve', _pendingApprovalsCount, isBadge: true),
-          _buildTabItem(2, 'My Leaves', _myLeavesCount),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabItem(int index, String label, int count,
-      {bool isBadge = false}) {
-    final isSelected = _selectedTabIndex == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedTabIndex = index),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                  color: isSelected ? AppColors.primary : AppColors.textMuted,
-                ),
-              ),
-              const SizedBox(width: 5),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                decoration: BoxDecoration(
-                  color: isBadge && count > 0
-                      ? Colors.orange
-                      : (isSelected
-                          ? AppColors.primary.withValues(alpha: 0.12)
-                          : Colors.grey.shade200),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '$count',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: isBadge && count > 0
-                        ? Colors.white
-                        : (isSelected
-                            ? AppColors.primary
-                            : Colors.grey.shade700),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -1172,4 +1003,3 @@ class _DetailRow extends StatelessWidget {
     );
   }
 }
-

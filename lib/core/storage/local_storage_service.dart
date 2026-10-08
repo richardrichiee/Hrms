@@ -133,6 +133,23 @@ class LocalStorageService {
   static const String keyTodayPunchHistory = 'key_today_punch_history';
   static const String keyTodayPunchDate = 'key_today_punch_date';
 
+  static Future<void> clearPunchCache({int? userId}) async {
+    try {
+      final prefs = await _getPrefs();
+      final suffix = await _userSuffix(userId);
+      await prefs.remove('${keyTodayPunchHistory}_$suffix');
+      await prefs.remove('${keyTodayPunchDate}_$suffix');
+      await prefs.remove('${keyLastPunchDate}_$suffix');
+      await prefs.remove('${keyLastPunchStatus}_$suffix');
+      await prefs.remove('${keyLastPunchTime}_$suffix');
+      await prefs.remove(keyTodayPunchHistory);
+      await prefs.remove(keyTodayPunchDate);
+      await prefs.remove(keyLastPunchDate);
+      await prefs.remove(keyLastPunchStatus);
+      await prefs.remove(keyLastPunchTime);
+    } catch (_) {}
+  }
+
   static Future<void> saveLastPunch({
     required String status,
     required String time,
@@ -195,7 +212,7 @@ class LocalStorageService {
 
       final newPunch = {
         'InOutTime': time,
-        'TimeFlag': status.toUpperCase() == 'IN' ? 1 : 0,
+        'TimeFlag': status.toUpperCase() == 'IN' ? 0 : 1,
         'Reason': reason ??
             (status.toUpperCase() == 'IN'
                 ? 'Mobile Check In'
@@ -245,7 +262,7 @@ class LocalStorageService {
           return [
             LastAttendanceModel(
               inOutTime: time,
-              timeFlag: status.toUpperCase() == 'IN' ? 1 : 0,
+              timeFlag: status.toUpperCase() == 'IN' ? 0 : 1,
               reason: status.toUpperCase() == 'IN'
                   ? 'Mobile Check In'
                   : 'Mobile Check Out',
