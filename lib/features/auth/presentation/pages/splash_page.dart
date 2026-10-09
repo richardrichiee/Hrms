@@ -11,10 +11,24 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<SplashPage> {
+  String? _companyImageUrl;
+
   @override
   void initState() {
     super.initState();
+    _loadCompanyLogo();
     _checkAuthSession();
+  }
+
+  Future<void> _loadCompanyLogo() async {
+    try {
+      final img = await LocalStorageService.getCompanyImageUrl();
+      if (mounted && img != null && img.isNotEmpty) {
+        setState(() {
+          _companyImageUrl = img;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _checkAuthSession() async {
@@ -47,6 +61,21 @@ class _SplashPageState extends State<SplashPage> {
     }
   }
 
+  Widget _buildPlaceholderLogo() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.1),
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(
+        Icons.business_rounded,
+        size: 64,
+        color: AppColors.primary,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -55,18 +84,34 @@ class _SplashPageState extends State<SplashPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.business_rounded,
-                size: 64,
-                color: AppColors.primary,
-              ),
-            ),
+            _companyImageUrl != null && _companyImageUrl!.isNotEmpty
+                ? Container(
+                    constraints:
+                        const BoxConstraints(maxHeight: 80, maxWidth: 240),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.cardBorder),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Image.network(
+                      _companyImageUrl!,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) =>
+                          _buildPlaceholderLogo(),
+                    ),
+                  )
+                : _buildPlaceholderLogo(),
             const SizedBox(height: 24),
             const Text(
               'Dream Team HRMS',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../core/storage/local_storage_service.dart';
+import '../../data/services/access_point_service.dart';
 import '../../data/services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
@@ -20,6 +21,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   String? _errorMessage;
   String _accessPoint = '';
+  String? _companyImageUrl;
 
   @override
   void initState() {
@@ -29,10 +31,21 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _loadAccessPoint() async {
     final ap = await LocalStorageService.getAccessPoint();
+    final cachedImg = await LocalStorageService.getCompanyImageUrl();
     if (mounted) {
       setState(() {
         _accessPoint = ap ?? '';
+        _companyImageUrl = cachedImg;
       });
+    }
+
+    if (cachedImg == null || cachedImg.isEmpty) {
+      final fetchedImg = await AccessPointService().ensureCompanyImageUrl();
+      if (mounted && fetchedImg != null && fetchedImg.isNotEmpty) {
+        setState(() {
+          _companyImageUrl = fetchedImg;
+        });
+      }
     }
   }
 
@@ -90,18 +103,7 @@ class _LoginPageState extends State<LoginPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Header Logo
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.lock_person_outlined,
-                    size: 55,
-                    color: AppColors.primary,
-                  ),
-                ),
+                _buildCompanyLogo(),
                 const SizedBox(height: 20),
                 const Text(
                   'Employee Sign In',
@@ -227,4 +229,66 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
+
+  Widget _buildCompanyLogo() {
+    if (_companyImageUrl != null && _companyImageUrl!.isNotEmpty) {
+      return Center(
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 72, maxWidth: 240),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.cardBorder),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Image.network(
+            _companyImageUrl!,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) =>
+                _buildPlaceholderLogo(),
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return const SizedBox(
+                height: 48,
+                width: 48,
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+    return _buildPlaceholderLogo();
+  }
+
+  Widget _buildPlaceholderLogo() {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.lock_person_outlined,
+          size: 55,
+          color: AppColors.primary,
+        ),
+      ),
+    );
+  }
 }
+

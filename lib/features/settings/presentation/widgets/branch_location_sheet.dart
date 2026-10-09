@@ -91,9 +91,13 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
     if (_currentBranch != null) {
       if (_currentBranch!.latitude != null && _currentBranch!.latitude != 0.0) {
         _latController.text = _currentBranch!.latitude!.toString();
+      } else {
+        _latController.clear();
       }
       if (_currentBranch!.longitude != null && _currentBranch!.longitude != 0.0) {
         _lngController.text = _currentBranch!.longitude!.toString();
+      } else {
+        _lngController.clear();
       }
     }
   }

@@ -36,24 +36,8 @@ class BranchService {
               .map((item) => BranchModel.fromJson(item as Map<String, dynamic>))
               .toList();
           if (serverBranches.isNotEmpty) {
-            // Merge with local cached coordinates so nulls from server don't wipe out configured coordinates
-            final cached = await LocalStorageService.getBranches();
-            final merged = serverBranches.map((serverB) {
-              final localB = cached.firstWhere(
-                (c) => c.value == serverB.value,
-                orElse: () => serverB,
-              );
-              return BranchModel(
-                value: serverB.value,
-                name: serverB.name,
-                latitude: serverB.latitude ?? localB.latitude,
-                longitude: serverB.longitude ?? localB.longitude,
-                radius: serverB.radius ?? localB.radius ?? 100.0,
-              );
-            }).toList();
-
-            await LocalStorageService.saveBranches(merged);
-            return merged;
+            await LocalStorageService.saveBranches(serverBranches);
+            return serverBranches;
           }
         }
       }

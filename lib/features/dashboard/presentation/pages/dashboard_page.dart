@@ -17,6 +17,7 @@ import '../../data/services/branch_service.dart';
 import '../../data/services/financial_year_service.dart';
 import '../../data/services/notification_service.dart';
 import '../../../leave/data/services/leave_service.dart';
+import '../../../auth/data/services/access_point_service.dart';
 import '../widgets/attendance_calendar_widget.dart';
 import '../widgets/dashboard_metrics.dart';
 import '../widgets/leave_balance_chart.dart';
@@ -44,6 +45,7 @@ class _DashboardPageState extends State<DashboardPage> {
   String _userName = '';
   String _userDesignation = '';
   String _userAvatarLetter = '';
+  String? _companyImageUrl;
 
   List<BranchModel> _branches = [];
   BranchModel? _selectedBranch;
@@ -73,10 +75,14 @@ class _DashboardPageState extends State<DashboardPage> {
     final user = await LocalStorageService.getUser();
     final cachedBranches = await LocalStorageService.getBranches();
     final savedBranchId = await LocalStorageService.getSelectedBranchId();
+    final cachedCompanyLogo = await LocalStorageService.getCompanyImageUrl();
     await LocalStorageService.clearPunchCache();
 
     if (mounted) {
       setState(() {
+        if (cachedCompanyLogo != null && cachedCompanyLogo.isNotEmpty) {
+          _companyImageUrl = cachedCompanyLogo;
+        }
         if (user != null && _userName.isEmpty) {
           _userName = user.userName;
           _userAvatarLetter = user.userName.isNotEmpty
@@ -97,6 +103,16 @@ class _DashboardPageState extends State<DashboardPage> {
       });
     }
 
+    if (_companyImageUrl == null || _companyImageUrl!.isEmpty) {
+      AccessPointService().ensureCompanyImageUrl().then((img) {
+        if (mounted && img != null && img.isNotEmpty) {
+          setState(() {
+            _companyImageUrl = img;
+          });
+        }
+      });
+    }
+
     final leaveService = LeaveService();
     final branchId = _selectedBranch?.id ?? savedBranchId ?? 1;
     final empId = user?.employeeId;
@@ -107,9 +123,7 @@ class _DashboardPageState extends State<DashboardPage> {
         _employeeService.fetchEmployeeDashboard(date: formattedDate),
         _notificationService.fetchNotificationCount(),
         leaveService.fetchDashboardLeaves(date: formattedDate),
-        _branches.isEmpty
-            ? _branchService.fetchBranches()
-            : Future.value(_branches),
+        _branchService.fetchBranches(),
         _financialYears.isEmpty
             ? _financialYearService.fetchFinancialYears()
             : Future.value(_financialYears),
@@ -994,7 +1008,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _loadInitialData();
+                        },
                         child: const Text('Apply Changes'),
                       ),
                     ),
@@ -1010,16 +1027,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final branchName =
-        _selectedBranch?.name ??
-        (_branches.isNotEmpty ? _branches.first.name : '');
-    final fyName =
-        _selectedFinancialYear?.name ??
-        (_financialYears.isNotEmpty ? _financialYears.first.name : '');
-    final headerChipText = branchName.isNotEmpty && fyName.isNotEmpty
-        ? '$branchName ($fyName)'
-        : (branchName.isNotEmpty ? branchName : 'Dream Team HRMS');
-
     final selectedDay = _selectedDate.day;
     final selectedDayDetails = _liveDayDetails[selectedDay];
     final selectedInTime = selectedDayDetails?['inTime'];
@@ -1070,56 +1077,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         title: Align(
           alignment: Alignment.centerLeft,
-          child: GestureDetector(
-            onTap: _showHeaderPicker,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.cardBorder),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: AppColors.secondary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      headerChipText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  const Icon(
-                    Icons.arrow_drop_down_rounded,
-                    size: 18,
-                    color: AppColors.textSecondary,
-                  ),
-                ],
-              ),
-            ),
-          ),
+          child: _buildAppBarLogo(context),
         ),
         actions: [
           Stack(
@@ -1201,29 +1159,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       children: [
                         Row(
                           children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primary.withValues(
-                                      alpha: 0.3,
-                                    ),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
-                              ),
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.hub_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
+                            _buildDrawerLogo(),
                             const SizedBox(width: 10),
                             const Text(
                               'Cryptone HRMS',
@@ -1354,50 +1290,68 @@ class _DashboardPageState extends State<DashboardPage> {
                                     color: Color(0xFF64748B),
                                   ),
                                 ),
-                                if (_selectedBranch != null) ...[
-                                  const SizedBox(height: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3.5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(
-                                        alpha: 0.08,
+                                const SizedBox(height: 6),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      _showHeaderPicker();
+                                    },
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3.5,
                                       ),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
+                                      decoration: BoxDecoration(
                                         color: AppColors.primary.withValues(
-                                          alpha: 0.15,
+                                          alpha: 0.08,
                                         ),
-                                        width: 0.8,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: AppColors.primary.withValues(
+                                            alpha: 0.18,
+                                          ),
+                                          width: 0.8,
+                                        ),
                                       ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.storefront_rounded,
-                                          size: 11,
-                                          color: AppColors.primary,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Flexible(
-                                          child: Text(
-                                            '${_selectedBranch!.name}${_selectedFinancialYear != null ? " • ${_selectedFinancialYear!.name}" : ""}',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 10.5,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.primary,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.storefront_rounded,
+                                            size: 11.5,
+                                            color: AppColors.primary,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Flexible(
+                                            child: Text(
+                                              _selectedBranch != null
+                                                  ? '${_selectedBranch!.name}${_selectedFinancialYear != null ? " • ${_selectedFinancialYear!.name}" : ""}'
+                                                  : (_branches.isNotEmpty
+                                                        ? _branches.first.name
+                                                        : 'Select Branch'),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.primary,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(width: 3),
+                                          const Icon(
+                                            Icons.arrow_drop_down_rounded,
+                                            size: 15,
+                                            color: AppColors.primary,
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ],
+                                ),
                               ],
                             ),
                           ),
@@ -2052,6 +2006,116 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildAppBarLogo(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Scaffold.of(context).openDrawer(),
+      child: _companyImageUrl != null && _companyImageUrl!.isNotEmpty
+          ? Container(
+              height: 36,
+              constraints: const BoxConstraints(maxWidth: 160),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.cardBorder),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Image.network(
+                _companyImageUrl!,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildAppBarFallback(),
+              ),
+            )
+          : _buildAppBarFallback(),
+    );
+  }
+
+  Widget _buildAppBarFallback() {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.hub_rounded, color: AppColors.primary, size: 19),
+          SizedBox(width: 6),
+          Text(
+            'Cryptone HRMS',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+              letterSpacing: -0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDrawerLogo() {
+    if (_companyImageUrl != null && _companyImageUrl!.isNotEmpty) {
+      return Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.cardBorder),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(3),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: Image.network(
+            _companyImageUrl!,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) =>
+                _buildDrawerFallbackLogo(),
+          ),
+        ),
+      );
+    }
+    return _buildDrawerFallbackLogo();
+  }
+
+  Widget _buildDrawerFallbackLogo() {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: const Icon(Icons.hub_rounded, color: Colors.white, size: 20),
     );
   }
 

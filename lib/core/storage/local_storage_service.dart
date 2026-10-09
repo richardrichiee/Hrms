@@ -68,6 +68,27 @@ class LocalStorageService {
     }
   }
 
+  static const String keyCompanyImageUrl = 'key_company_image_url';
+
+  static Future<void> saveCompanyImageUrl(String imageUrl) async {
+    try {
+      final prefs = await _getPrefs();
+      await prefs.setString(keyCompanyImageUrl, imageUrl);
+      await _storage.write(key: keyCompanyImageUrl, value: imageUrl);
+    } catch (_) {}
+  }
+
+  static Future<String?> getCompanyImageUrl() async {
+    try {
+      final prefs = await _getPrefs();
+      final val = prefs.getString(keyCompanyImageUrl);
+      if (val != null && val.isNotEmpty) return val;
+      return await _storage.read(key: keyCompanyImageUrl);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> saveUser(UserModel user) async {
     try {
       final userJson = jsonEncode(user.toJson());

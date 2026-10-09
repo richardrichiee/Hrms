@@ -35,19 +35,17 @@ class ChangePasswordService {
         .join('-');
   }
 
-  /// POST /api/HRM/ChangePassWord/v1/Save/{id}/{UserID}/{timeStamp}/{accessPoint}
+  /// POST /api/HRM/Mobile/v1/UpdatePassword/{UserID}/{timeStamp}/{accessPoint}
   Future<ChangePasswordResult> changePassword({
     required String newPassword,
   }) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint =
+          await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
       final user = await LocalStorageService.getUser();
       final targetId = (user != null && user.userId > 0)
           ? user.userId
           : ((user != null && user.employeeId > 0) ? user.employeeId : 0);
-      final actingUserId = (user != null && user.userId > 0)
-          ? user.userId
-          : targetId;
 
       if (targetId == 0) {
         return const ChangePasswordResult(
@@ -56,9 +54,8 @@ class ChangePasswordService {
         );
       }
 
-      final url = AppUrls.getChangePasswordSaveUrl(
-        id: targetId,
-        userId: actingUserId,
+      final newUrl = AppUrls.getUpdatePasswordUrl(
+        userId: targetId,
         accessPoint: accessPoint,
       );
 
@@ -70,16 +67,42 @@ class ChangePasswordService {
         }
       };
 
-      final response = await _dio.post(
-        url,
-        data: payload,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-        ),
-      );
+      Response? response;
+      try {
+        response = await _dio.post(
+          newUrl,
+          data: payload,
+          options: Options(
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          ),
+        );
+      } on DioException catch (dioErr) {
+        // If the newly added mobile endpoint throws an internal server error (e.g. backend index bug),
+        // fallback seamlessly to the stable ChangePassWord/v1/Save endpoint
+        final statusCode = dioErr.response?.statusCode;
+        if (statusCode == 500 || statusCode == 404 || statusCode == 400) {
+          final fallbackUrl = AppUrls.getChangePasswordSaveUrl(
+            id: targetId,
+            userId: targetId,
+            accessPoint: accessPoint,
+          );
+          response = await _dio.post(
+            fallbackUrl,
+            data: payload,
+            options: Options(
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+            ),
+          );
+        } else {
+          rethrow;
+        }
+      }
 
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
@@ -118,6 +141,16 @@ class ChangePasswordService {
       return const ChangePasswordResult(
         isSuccess: false,
         message: 'Server returned an invalid response. Please try again.',
+      );
+    } on DioException catch (e) {
+      final serverMsg = (e.response?.data is Map && e.response?.data['error'] is Map)
+          ? e.response?.data['error']['message']?.toString() ??
+              e.response?.data['error']['Message']?.toString()
+          : null;
+      return ChangePasswordResult(
+        isSuccess: false,
+        message: serverMsg ??
+            'Unable to connect to server. Please check your connection and try again.',
       );
     } catch (e) {
       return const ChangePasswordResult(

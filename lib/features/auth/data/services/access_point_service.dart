@@ -5,11 +5,13 @@ import '../../../../core/storage/local_storage_service.dart';
 class AccessPointResult {
   final bool isSuccess;
   final String? accessPoint;
+  final String? companyImageUrl;
   final String? errorMessage;
 
   AccessPointResult({
     required this.isSuccess,
     this.accessPoint,
+    this.companyImageUrl,
     this.errorMessage,
   });
 }
@@ -21,6 +23,20 @@ class AccessPointService {
       receiveTimeout: const Duration(seconds: 15),
     ),
   );
+
+  Future<String?> ensureCompanyImageUrl() async {
+    try {
+      final cachedUrl = await LocalStorageService.getCompanyImageUrl();
+      if (cachedUrl != null && cachedUrl.isNotEmpty) {
+        return cachedUrl;
+      }
+      final accessId = await LocalStorageService.getAccessId() ?? 'abcd';
+      final res = await fetchAccessPoint(accessId);
+      return res.companyImageUrl;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<AccessPointResult> fetchAccessPoint(String accessId) async {
     try {
@@ -39,15 +55,20 @@ class AccessPointService {
             (data['value'] as List).isNotEmpty) {
           final firstItem = (data['value'] as List).first;
           final accessPoint = firstItem['AccessPoint'] as String?;
+          final companyImageUrl = firstItem['CompanyImageUrl'] as String?;
 
           if (accessPoint != null && accessPoint.isNotEmpty) {
             // Save to secure local storage
             await LocalStorageService.saveAccessPoint(accessPoint);
             await LocalStorageService.saveAccessId(accessId);
+            if (companyImageUrl != null && companyImageUrl.isNotEmpty) {
+              await LocalStorageService.saveCompanyImageUrl(companyImageUrl);
+            }
 
             return AccessPointResult(
               isSuccess: true,
               accessPoint: accessPoint,
+              companyImageUrl: companyImageUrl,
             );
           }
         }
