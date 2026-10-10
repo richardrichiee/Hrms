@@ -600,7 +600,14 @@ class _LeavePageState extends State<LeavePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Leave Management'),
+        titleSpacing: 0,
+        title: const Text(
+          'Leave Management',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         actions: [
           IconButton(
             icon: Stack(
@@ -905,23 +912,30 @@ class _LeavePageState extends State<LeavePage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.date_range_outlined,
-                                      size: 15, color: AppColors.primary),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    item.fromDate == item.toDate
-                                        ? 'Leave Date: ${item.fromDate}'
-                                        : 'Leave Date: ${item.fromDate} - ${item.toDate}',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary,
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.date_range_outlined,
+                                        size: 15, color: AppColors.primary),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        item.fromDate == item.toDate
+                                            ? 'Leave Date: ${item.fromDate}'
+                                            : 'Leave Date: ${item.fromDate} - ${item.toDate}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: -0.2,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 3),
@@ -959,7 +973,7 @@ class _LeavePageState extends State<LeavePage> {
                   );
                 },
               ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 84),
           ],
         ),
       ),

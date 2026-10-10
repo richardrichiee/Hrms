@@ -440,7 +440,14 @@ class _ClaimsPageState extends State<ClaimsPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Claims & Reimbursements'),
+        titleSpacing: 0,
+        title: const Text(
+          'Claims & Reimbursements',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         actions: [
           IconButton(
             icon: Stack(
