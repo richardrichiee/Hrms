@@ -1,6 +1,6 @@
 class LastAttendanceModel {
   final String inOutTime;
-  final int timeFlag; // 1 = Check In, 0 = Check Out
+  final int timeFlag; // 0 = Check In, 1 = Check Out
   final String? reason;
 
   LastAttendanceModel({
@@ -9,8 +9,8 @@ class LastAttendanceModel {
     this.reason,
   });
 
-  bool get isCheckedIn => timeFlag == 1;
-  bool get isCheckedOut => timeFlag == 0;
+  bool get isCheckedIn => timeFlag == 0;
+  bool get isCheckedOut => timeFlag == 1;
 
   /// Helper to get a cleanly formatted time (e.g., '10:26 AM')
   String get formattedTime {

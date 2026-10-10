@@ -32,12 +32,12 @@ class BranchService {
         final data = response.data;
         if (data['value'] != null && data['value'] is List) {
           final list = data['value'] as List;
-          final branches = list
+          final serverBranches = list
               .map((item) => BranchModel.fromJson(item as Map<String, dynamic>))
               .toList();
-          if (branches.isNotEmpty) {
-            await LocalStorageService.saveBranches(branches);
-            return branches;
+          if (serverBranches.isNotEmpty) {
+            await LocalStorageService.saveBranches(serverBranches);
+            return serverBranches;
           }
         }
       }
@@ -106,4 +106,3 @@ class BranchService {
     }
   }
 }
-

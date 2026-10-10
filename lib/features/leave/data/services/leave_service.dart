@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/network/app_urls.dart';
 import '../../../../core/storage/local_storage_service.dart';
+import '../../../auth/data/services/user_rights_service.dart';
 import '../models/leave_application_model.dart';
 import '../models/leave_details_model.dart';
 
@@ -170,6 +171,7 @@ class LeaveService {
     required String toDate,
     required String noOfLeaves,
     required String reason,
+    String? approvalStatus,
   }) async {
     try {
       final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
@@ -178,6 +180,19 @@ class LeaveService {
       final empId = (user?.employeeId != null && user!.employeeId > 0)
           ? user.employeeId.toString()
           : (user?.userId != null && user!.userId > 0 ? user.userId.toString() : '26');
+
+      // Check transaction hierarchy from UserRights (MenuCode 19):
+      // 1 = No hierarchy, 2 = Forward, 3 = Approve/Reject
+      // If transactions == 3, the applicant is an approver, so leave is straight approved ('A')
+      String finalApprovalStatus = approvalStatus ?? 'N';
+      if (finalApprovalStatus != 'A') {
+        try {
+          final rights = await UserRightsService().fetchUserRights(menuCode: 19);
+          if (rights.transactions == 3) {
+            finalApprovalStatus = 'A';
+          }
+        } catch (_) {}
+      }
 
       final url = AppUrls.getSaveLeaveApplicationUrl(
         id: 0,
@@ -194,7 +209,7 @@ class LeaveService {
           "FromDate": _formatToIsoDate(fromDate),
           "ToDate": _formatToIsoDate(toDate),
           "NoOfLeaves": noOfLeaves,
-          "ApprovalStatus": "N",
+          "ApprovalStatus": finalApprovalStatus,
           "Reason": reason,
           "addBy": userId.toString(),
         }
@@ -211,7 +226,31 @@ class LeaveService {
         ),
       );
 
-      return response.statusCode == 200;
+      if (response.statusCode == 200) {
+        if (finalApprovalStatus == 'A') {
+          // If response provides the created record Key/ID, also trigger approveOrForwardLeave
+          // to guarantee both database tables and workflow state mark it as Approved
+          try {
+            int? createdKey;
+            if (response.data != null && response.data is Map) {
+              final val = response.data['value'];
+              if (val is int) {
+                createdKey = val;
+              } else if (val is Map && val['Key'] != null) {
+                createdKey = int.tryParse(val['Key'].toString());
+              } else if (val is List && val.isNotEmpty && val.first is Map) {
+                createdKey = int.tryParse(
+                    val.first['Key']?.toString() ?? val.first['ID']?.toString() ?? '');
+              }
+            }
+            if (createdKey != null && createdKey > 0) {
+              await approveOrForwardLeave(key: createdKey, approvalStatus: 'A');
+            }
+          } catch (_) {}
+        }
+        return true;
+      }
+      return false;
     } catch (e) {
       return false;
     }

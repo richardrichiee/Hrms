@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../core/storage/local_storage_service.dart';
+import '../../../profile/data/models/employee_details_model.dart';
+import '../../../profile/data/services/employee_service.dart';
 import '../../data/models/leave_application_model.dart';
+import '../../data/models/leave_details_model.dart';
 import '../../data/services/leave_service.dart';
 import '../widgets/apply_leave_dialog.dart';
 
@@ -26,50 +30,378 @@ class LeaveTypeDetailsPage extends StatefulWidget {
 
 class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
   final _leaveService = LeaveService();
+  final _employeeService = EmployeeService();
+
   List<LeaveApplicationModel> _filteredApplications = [];
+  LeaveBalanceItem? _balanceItem;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadApplications();
+    _loadData();
   }
 
-  Future<void> _loadApplications() async {
+  Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final allApps = await _leaveService.fetchLeaveApplications();
+    try {
+      final user = await LocalStorageService.getUser();
+      final results = await Future.wait([
+        _leaveService.fetchLeaveApplications(),
+        _employeeService.fetchEmployeeDashboard(),
+      ]);
 
-    if (mounted) {
-      setState(() {
-        _filteredApplications = allApps.where((app) {
-          final name = app.leaveName.toLowerCase();
-          final target = widget.leaveName.toLowerCase();
-          return name.contains(target) ||
-              (widget.leaveId == '1' && name.contains('casual')) ||
-              (widget.leaveId == '2' && name.contains('sick'));
-        }).toList();
-        _isLoading = false;
-      });
+      final allApps = results[0] as List<LeaveApplicationModel>;
+      final empDetails = results[1] as EmployeeDetailsModel?;
+
+      final currentUserName = (empDetails != null && empDetails.name.isNotEmpty)
+          ? empDetails.name
+          : (user?.userName ?? '');
+
+      final leaveIdInt = int.tryParse(widget.leaveId) ?? 0;
+      LeaveBalanceItem? balance;
+      if (empDetails?.leaveBalances != null) {
+        for (final b in empDetails!.leaveBalances) {
+          if (b.leaveId == leaveIdInt ||
+              b.leaveName.toLowerCase().contains(widget.leaveName.toLowerCase()) ||
+              (widget.leaveId == '1' && b.leaveName.toLowerCase().contains('casual')) ||
+              (widget.leaveId == '2' && b.leaveName.toLowerCase().contains('sick'))) {
+            balance = b;
+            break;
+          }
+        }
+      }
+
+      final filtered = allApps.where((app) {
+        final isUser = _isCurrentUser(app.employee, currentUserName);
+        if (!isUser) return false;
+        final name = app.leaveName.toLowerCase();
+        final target = widget.leaveName.toLowerCase();
+        return name.contains(target) ||
+            (widget.leaveId == '1' && name.contains('casual')) ||
+            (widget.leaveId == '2' && name.contains('sick'));
+      }).toList();
+
+      filtered.sort((a, b) => b.key.compareTo(a.key));
+
+      if (mounted) {
+        setState(() {
+          _filteredApplications = filtered;
+          _balanceItem = balance;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  bool _isCurrentUser(String employeeName, String currentUserName) {
+    if (currentUserName.trim().isEmpty) return true;
+    final cleanEmp =
+        employeeName.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+    final cleanUser =
+        currentUserName.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+    if (cleanEmp.isEmpty || cleanUser.isEmpty) return false;
+    return cleanEmp == cleanUser ||
+        cleanEmp.contains(cleanUser) ||
+        cleanUser.contains(cleanEmp);
+  }
+
   void _openApplyModal() {
-    showModalBottomSheet(
+    showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => ApplyLeaveDialog(initialLeaveId: widget.leaveId),
-    ).then((_) => _loadApplications());
+    ).then((result) {
+      if (result == true) {
+        _loadData();
+      }
+    });
+  }
+
+  String _formatStatus(String? rawStatus) {
+    if (rawStatus == null || rawStatus.isEmpty) return 'Pending';
+    final s = rawStatus.trim().toUpperCase();
+    if (s == 'A' || s == 'APPROVED' || s == 'APPROVE') return 'Approved';
+    if (s == 'R' || s == 'REJECTED' || s == 'REJECT') return 'Rejected';
+    if (s == 'F' || s == 'FORWARD' || s == 'FORWARDED') return 'Forwarded';
+    return 'Pending';
+  }
+
+  Color _getStatusColor(String? rawStatus) {
+    final status = _formatStatus(rawStatus);
+    switch (status) {
+      case 'Approved':
+        return const Color(0xFF16A34A);
+      case 'Rejected':
+        return const Color(0xFFDC2626);
+      case 'Forwarded':
+        return const Color(0xFF2563EB);
+      case 'Pending':
+      default:
+        return const Color(0xFFD97706);
+    }
+  }
+
+  Color _getStatusBg(String? rawStatus) {
+    final status = _formatStatus(rawStatus);
+    switch (status) {
+      case 'Approved':
+        return const Color(0xFFDCFCE7);
+      case 'Rejected':
+        return const Color(0xFFFEE2E2);
+      case 'Forwarded':
+        return const Color(0xFFDBEAFE);
+      case 'Pending':
+      default:
+        return const Color(0xFFFEF3C7);
+    }
+  }
+
+  void _showLeaveDetailsModal(LeaveApplicationModel summaryItem) {
+    final statusText = _formatStatus(summaryItem.status);
+    final statusBgColor = _getStatusBg(summaryItem.status);
+    final statusTextColor = _getStatusColor(summaryItem.status);
+    final isPending = statusText == 'Pending' || statusText == 'Forwarded';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return FutureBuilder<LeaveDetailsModel?>(
+          future: _leaveService.fetchLeaveApplicationDetails(summaryItem.key),
+          builder: (context, snapshot) {
+            final details = snapshot.data;
+            final reason = details?.reason.isNotEmpty == true
+                ? details!.reason
+                : summaryItem.reason;
+            final noOfLeaves = details?.noOfLeaves ?? summaryItem.noOfLeaves;
+
+            return Container(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).padding.bottom + 20,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Application #${summaryItem.key}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: statusBgColor,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            statusText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: statusTextColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    _DetailRow(
+                      label: 'Applicant',
+                      value: summaryItem.employee,
+                    ),
+                    _DetailRow(
+                      label: 'Leave Category',
+                      value: summaryItem.leaveName,
+                    ),
+                    _DetailRow(
+                      label: 'Leave Duration',
+                      value:
+                          '$noOfLeaves ${(noOfLeaves == 1) ? "Day" : "Days"} (${summaryItem.leaveType})',
+                    ),
+                    _DetailRow(
+                      label: 'From Date',
+                      value: summaryItem.fromDate,
+                    ),
+                    _DetailRow(
+                      label: 'To Date',
+                      value: summaryItem.toDate,
+                    ),
+                    _DetailRow(
+                      label: 'Reason',
+                      value: reason.isNotEmpty ? reason : 'No reason specified',
+                    ),
+                    const SizedBox(height: 16),
+                    if (isPending) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.error,
+                                side: const BorderSide(color: AppColors.error),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (dlgCtx) => AlertDialog(
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(16)),
+                                    title: const Row(
+                                      children: [
+                                        Icon(Icons.warning_amber_rounded,
+                                            color: AppColors.error),
+                                        SizedBox(width: 8),
+                                        Text('Cancel Leave Request'),
+                                      ],
+                                    ),
+                                    content: Text(
+                                        'Are you sure you want to cancel leave application #${summaryItem.key}?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(dlgCtx, false),
+                                        child: const Text('Keep Leave'),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.error,
+                                        ),
+                                        onPressed: () =>
+                                            Navigator.pop(dlgCtx, true),
+                                        child: const Text('Yes, Cancel'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (confirm != true || !context.mounted) return;
+
+                                final messenger = ScaffoldMessenger.of(context);
+                                Navigator.pop(context);
+                                final success =
+                                    await _leaveService.saveLeaveCancellation(
+                                  lvApplicationId: summaryItem.key.toString(),
+                                  remarks: 'Cancel leave request',
+                                );
+                                if (mounted && success) {
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                          'Leave Cancellation submitted for approval!'),
+                                      backgroundColor: Colors.orange,
+                                    ),
+                                  );
+                                  _loadData();
+                                }
+                              },
+                              child: const Text('Cancel Leave'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: widget.color,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Close',
+                                  style: TextStyle(color: Colors.white)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: widget.color,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close',
+                              style: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final balanceVal = _balanceItem?.closing;
+    final balanceStr = balanceVal != null
+        ? '${(balanceVal % 1 == 0) ? balanceVal.toInt() : balanceVal} ${(balanceVal == 1) ? "Day" : "Days"}'
+        : '0 Days';
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.leaveName),
+        titleSpacing: 0,
+        title: Text(
+          widget.leaveName,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 20),
+            tooltip: 'Refresh',
+            onPressed: _loadData,
+          ),
+        ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadApplications,
+        onRefresh: _loadData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.only(
@@ -161,9 +493,19 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         _LiveMetric(
+                          label: 'Available Balance',
+                          value: balanceStr,
+                          color: widget.color,
+                        ),
+                        Container(
+                          height: 32,
+                          width: 1,
+                          color: AppColors.cardBorder,
+                        ),
+                        _LiveMetric(
                           label: 'Total Applied',
                           value: '${_filteredApplications.length}',
-                          color: widget.color,
+                          color: AppColors.textPrimary,
                         ),
                         Container(
                           height: 32,
@@ -223,7 +565,7 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${widget.leaveName} Applications',
+                    '${widget.leaveName} History',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -231,7 +573,7 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                     ),
                   ),
                   Text(
-                    '${_filteredApplications.length} found',
+                    '${_filteredApplications.length} records',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textMuted,
@@ -267,6 +609,11 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                         'No previous ${widget.leaveName} applications found',
                         style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                       ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Use the floating button below to apply',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                      ),
                     ],
                   ),
                 )
@@ -275,58 +622,154 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _filteredApplications.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 10),
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final item = _filteredApplications[index];
-                    return Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.cardBorder),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.fromDate == item.toDate
-                                    ? item.fromDate
-                                    : '${item.fromDate} - ${item.toDate}',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary,
+                    final statusText = _formatStatus(item.status);
+                    final statusBg = _getStatusBg(item.status);
+                    final statusColor = _getStatusColor(item.status);
+
+                    return GestureDetector(
+                      onTap: () => _showLeaveDetailsModal(item),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.cardBorder),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.02),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: widget.color.withValues(alpha: 0.12),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(widget.icon, size: 18, color: widget.color),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item.employee,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${item.leaveName} • ${item.leaveType}',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                                color: AppColors.textMuted,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 3),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: statusBg,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    statusText,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: statusColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 20, color: AppColors.cardBorder),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.date_range_outlined,
+                                          size: 15, color: AppColors.primary),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          item.fromDate == item.toDate
+                                              ? 'Leave Date: ${item.fromDate}'
+                                              : 'Leave Date: ${item.fromDate} - ${item.toDate}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: -0.2,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${(item.noOfLeaves % 1 == 0) ? item.noOfLeaves.toInt() : item.noOfLeaves} ${(item.noOfLeaves == 1) ? "Day" : "Days"}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (item.reason.isNotEmpty) ...[
+                              const SizedBox(height: 8),
                               Text(
-                                '${item.leaveType} • Ref #${item.key}',
+                                'Reason: ${item.reason}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 12,
                                   color: AppColors.textMuted,
                                 ),
                               ),
                             ],
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: widget.color.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Text(
-                              'Submitted',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: widget.color,
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -335,29 +778,15 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
           ),
         ),
       ),
-      bottomSheet: Container(
-        color: Colors.white,
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 12,
-          bottom: MediaQuery.of(context).padding.bottom + 12,
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton.icon(
-            onPressed: _openApplyModal,
-            icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
-            label: Text(
-              'Apply for ${widget.leaveName}',
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: widget.color,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openApplyModal,
+        backgroundColor: widget.color,
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: Text(
+          'Apply ${widget.leaveName}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
@@ -383,7 +812,7 @@ class _LiveMetric extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: FontWeight.bold,
             color: color,
           ),
@@ -394,6 +823,46 @@ class _LiveMetric extends StatelessWidget {
           style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
         ),
       ],
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textMuted,
+            ),
+          ),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

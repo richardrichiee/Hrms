@@ -126,4 +126,78 @@ class AttendanceService {
       return [];
     }
   }
+
+  /// POST /api/HRM/Attendance/v1/Save/{id}/{userId}/{timeStamp}/{accessPoint}
+  Future<bool> saveAttendance({
+    required int branchId,
+    required int employeeId,
+    required String inOutTime,
+    required int timeFlag, // 0 = Check In, 1 = Check Out
+    required String date, // dd/MM/yyyy
+    String? reason,
+    String? inTime,
+    String? outTime,
+  }) async {
+    try {
+      final accessPoint =
+          await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final user = await LocalStorageService.getUser();
+      final userId = user?.userId ?? 2;
+
+      final url = AppUrls.getSaveAttendanceUrl(
+        accessPoint: accessPoint,
+        userId: userId,
+      );
+
+      final payload = {
+        "Head": {
+          "BranchID": branchId.toString(),
+          "Date": date,
+        },
+        "Tail": [
+          {
+            "EmployeeID": employeeId.toString(),
+            "InTime": inTime ?? (timeFlag == 0 ? inOutTime : ""),
+            "OutTime": outTime ?? (timeFlag == 1 ? inOutTime : ""),
+          }
+        ],
+        "Tail2": [
+          {
+            "EmployeeID": employeeId.toString(),
+            "InOutTime": inOutTime,
+            "Reason": reason ??
+                (timeFlag == 0 ? "Mobile Check In" : "Mobile Check Out"),
+            "TimeFlag": timeFlag.toString(),
+          }
+        ]
+      };
+
+      final response = await _dio.post(
+        url,
+        data: payload,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data;
+        if (data['value'] != null &&
+            data['value'] is List &&
+            (data['value'] as List).isNotEmpty) {
+          final first = (data['value'] as List).first;
+          final errorMsg = first['ERRORMESSAGE']?.toString() ?? '';
+          if (errorMsg.isEmpty) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
 }

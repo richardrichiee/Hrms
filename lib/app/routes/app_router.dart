@@ -9,6 +9,7 @@ import '../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../features/leave/presentation/pages/leave_page.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
+import '../../features/settings/presentation/pages/change_password_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
 import '../../features/shell/presentation/pages/main_shell_page.dart';
 
@@ -41,6 +42,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/notifications',
       builder: (context, state) => const NotificationsPage(),
+    ),
+    GoRoute(
+      path: '/change-password',
+      builder: (context, state) => const ChangePasswordPage(),
     ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {

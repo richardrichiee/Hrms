@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../core/storage/local_storage_service.dart';
 import '../../../dashboard/data/models/branch_model.dart';
 import '../../../dashboard/data/services/branch_service.dart';
 
 class BranchLocationSheet extends StatefulWidget {
-  const BranchLocationSheet({super.key});
+  final BranchModel? initialBranch;
+  const BranchLocationSheet({super.key, this.initialBranch});
 
-  static Future<void> show(BuildContext context) {
+  static Future<void> show(BuildContext context, {BranchModel? branch}) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const BranchLocationSheet(),
+      builder: (context) => BranchLocationSheet(initialBranch: branch),
     );
   }
 
@@ -25,17 +27,15 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
 
-  List<BranchModel> _branches = [];
-  BranchModel? _selectedBranch;
+  BranchModel? _currentBranch;
   bool _isLoading = true;
   bool _isLocating = false;
   bool _isSaving = false;
-  bool _isUnlockedForEditing = true;
 
   @override
   void initState() {
     super.initState();
-    _loadBranches();
+    _loadActiveBranch();
   }
 
   @override
@@ -45,26 +45,68 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
     super.dispose();
   }
 
-  Future<void> _loadBranches() async {
+  Future<void> _loadActiveBranch() async {
     setState(() => _isLoading = true);
-    final branches = await _branchService.fetchBranches();
-    if (mounted) {
-      setState(() {
-        _branches = branches;
-        if (_branches.isNotEmpty) {
-          _selectedBranch = _branches.first;
-          _updateControllers();
+    try {
+      final branches = await _branchService.fetchBranches();
+      final savedBranchId = await LocalStorageService.getSelectedBranchId();
+
+      BranchModel? target;
+      if (widget.initialBranch != null) {
+        target = branches.firstWhere(
+          (b) => b.value == widget.initialBranch!.value,
+          orElse: () => widget.initialBranch!,
+        );
+      } else if (branches.isNotEmpty) {
+        if (savedBranchId != null) {
+          target = branches.firstWhere(
+            (b) => b.value == savedBranchId,
+            orElse: () => branches.first,
+          );
+        } else {
+          target = branches.first;
         }
-        _isLoading = false;
-      });
+      } else {
+        target = BranchModel(
+          value: savedBranchId ?? 1,
+          name: 'Head Office',
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _currentBranch = target;
+          _updateControllers();
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   void _updateControllers() {
-    if (_selectedBranch != null) {
-      _latController.text = _selectedBranch!.latitude?.toString() ?? '';
-      _lngController.text = _selectedBranch!.longitude?.toString() ?? '';
+    if (_currentBranch != null) {
+      if (_currentBranch!.latitude != null && _currentBranch!.latitude != 0.0) {
+        _latController.text = _currentBranch!.latitude!.toString();
+      } else {
+        _latController.clear();
+      }
+      if (_currentBranch!.longitude != null && _currentBranch!.longitude != 0.0) {
+        _lngController.text = _currentBranch!.longitude!.toString();
+      } else {
+        _lngController.clear();
+      }
     }
+  }
+
+  bool get _isConfigured {
+    if (_currentBranch == null) return false;
+    final lat = _currentBranch!.latitude;
+    final lng = _currentBranch!.longitude;
+    return lat != null && lng != null && lat != 0.0 && lng != 0.0;
   }
 
   Future<void> _captureCurrentLocation() async {
@@ -77,6 +119,7 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
           const SnackBar(
             content: Text('Please enable GPS/Location services on your device.'),
             backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
           ),
         );
         return;
@@ -89,10 +132,9 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                'Location permission is required to detect GPS coordinates.',
-              ),
+              content: Text('Location permission is required to detect GPS coordinates.'),
               backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
             ),
           );
           return;
@@ -103,10 +145,9 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Location permission is permanently denied in settings.',
-            ),
+            content: Text('Location permission is permanently denied in settings.'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
           ),
         );
         return;
@@ -129,7 +170,7 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
             content: Text(
               'Current GPS captured: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}',
             ),
-            backgroundColor: AppColors.success,
+            backgroundColor: const Color(0xFF059669),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -140,6 +181,7 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
         SnackBar(
           content: Text('Error detecting location: $e'),
           backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
@@ -148,7 +190,7 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
   }
 
   Future<void> _saveLocation() async {
-    final branch = _selectedBranch;
+    final branch = _currentBranch;
     if (branch == null) return;
 
     final lat = double.tryParse(_latController.text.trim());
@@ -157,8 +199,9 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
     if (lat == null || lng == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter or capture valid Latitude and Longitude.'),
+          content: Text('Please enter or detect valid Latitude and Longitude coordinates.'),
           backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
@@ -183,48 +226,64 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
           longitude: lng,
           radius: branch.radius ?? 100.0,
         );
+
+        // Update local cached branch list
+        try {
+          final cachedBranches = await LocalStorageService.getBranches();
+          final idx = cachedBranches.indexWhere((b) => b.value == branch.value);
+          if (idx != -1) {
+            cachedBranches[idx] = updatedBranch;
+          } else {
+            cachedBranches.add(updatedBranch);
+          }
+          await LocalStorageService.saveBranches(cachedBranches);
+        } catch (_) {}
+
         if (mounted) {
           setState(() {
-            _selectedBranch = updatedBranch;
-            final idx = _branches.indexWhere((b) => b.value == branch.value);
-            if (idx != -1) {
-              _branches[idx] = updatedBranch;
-            }
+            _currentBranch = updatedBranch;
+            _updateControllers();
           });
-        }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(
-                  Icons.check_circle_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Location saved and locked for ${branch.name}!'),
-                ),
-              ],
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Location saved and locked for ${branch.name}!',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF059669),
+              behavior: SnackBarBehavior.floating,
             ),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        Navigator.pop(context, updatedBranch);
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to save branch location. Please try again.'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+        SnackBar(
+          content: Text('Error saving location: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -233,19 +292,11 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isConfigured =
-        _selectedBranch != null &&
-        _selectedBranch!.latitude != null &&
-        _selectedBranch!.longitude != null &&
-        _selectedBranch!.latitude != 0.0 &&
-        _selectedBranch!.longitude != 0.0;
-    final isLocked = isConfigured && !_isUnlockedForEditing;
-
     return Container(
       padding: EdgeInsets.only(
         left: 20,
         right: 20,
-        top: 20,
+        top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       decoration: const BoxDecoration(
@@ -254,8 +305,10 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
       ),
       child: _isLoading
           ? const SizedBox(
-              height: 200,
-              child: Center(child: CircularProgressIndicator()),
+              height: 240,
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
             )
           : Column(
               mainAxisSize: MainAxisSize.min,
@@ -264,29 +317,30 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
                 // Handle Bar
                 Center(
                   child: Container(
-                    width: 40,
+                    width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: const Color(0xFFE2E8F0),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // Title Row
+                // Header Row
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
+                        color: const Color(0xFFF5F3FF),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFDDD6FE)),
                       ),
                       child: const Icon(
                         Icons.add_location_alt_rounded,
-                        color: AppColors.primary,
-                        size: 24,
+                        color: Color(0xFF7C3AED),
+                        size: 22,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -295,277 +349,108 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Configure Branch Location',
+                            'Branch Location Setup',
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 17,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
+                              color: Color(0xFF0F172A),
+                              letterSpacing: -0.3,
                             ),
                           ),
+                          SizedBox(height: 2),
                           Text(
-                            'Set GPS coordinates for attendance geofencing',
+                            'Set office GPS coordinates',
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.textMuted,
+                              color: Color(0xFF64748B),
                             ),
                           ),
                         ],
                       ),
                     ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF94A3B8)),
+                      onPressed: () => Navigator.pop(context),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
 
-                // Branch Selector
-                const Text(
-                  'Select Branch',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 6),
+                // Active Branch Card (NO DROPDOWN - Fixed Active Branch)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.cardBorder),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<BranchModel>(
-                      isExpanded: true,
-                      value: _selectedBranch,
-                      items: _branches.map((b) {
-                        final bConfigured = b.latitude != null &&
-                            b.longitude != null &&
-                            b.latitude != 0.0 &&
-                            b.longitude != 0.0;
-                        return DropdownMenuItem<BranchModel>(
-                          value: b,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  b.name,
-                                  style: const TextStyle(fontWeight: FontWeight.w500),
-                                ),
-                              ),
-                              if (bConfigured)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: Colors.green.shade200),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.lock_rounded, size: 10, color: Colors.green.shade700),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        'Set',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green.shade700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        setState(() {
-                          _selectedBranch = val;
-                          _updateControllers();
-                        });
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Locked / Unlocked Status Banner when coordinates exist
-                if (isLocked) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFFBEB), // Amber 50
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFFDE68A)), // Amber 200
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFFEF3C7),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.lock_rounded,
-                                color: Color(0xFFD97706),
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Branch Location Locked',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF92400E),
-                                    ),
-                                  ),
-                                  SizedBox(height: 3),
-                                  Text(
-                                    'Coordinates for this branch are configured and locked. Once set, branch location cannot be modified from the mobile app. To update coordinates, please contact your backend administration team.',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      height: 1.35,
-                                      color: Color(0xFFB45309),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                _isUnlockedForEditing = true;
-                              });
-                            },
-                            style: TextButton.styleFrom(
-                              foregroundColor: const Color(0xFFB45309),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                            ),
-                            icon: const Icon(Icons.lock_open_rounded, size: 15),
-                            label: const Text(
-                              'Unlock to Edit Coordinates',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                ] else if (isConfigured) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFECFDF5), // Emerald 50
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFA7F3D0)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.edit_location_alt_rounded,
-                          color: Color(0xFF059669),
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            'Editing Unlocked: You can modify coordinates or detect device GPS.',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: Color(0xFF065F46),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _isUnlockedForEditing = false;
-                            });
-                          },
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF059669),
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          child: const Text(
-                            'Lock',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-
-                // Backend Radius & Status Card
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.cardBorder),
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        isConfigured
-                            ? Icons.lock_rounded
-                            : Icons.info_outline_rounded,
-                        color: isConfigured ? AppColors.success : Colors.orange,
-                        size: 20,
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF2FF),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.apartment_rounded,
+                          color: Color(0xFF4F46E5),
+                          size: 20,
+                        ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              isConfigured
-                                  ? 'Coordinates configured (Locked)'
-                                  : 'Not yet configured',
+                            const Text(
+                              'ASSIGNED BRANCH',
                               style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: isConfigured
-                                    ? AppColors.success
-                                    : Colors.orange.shade800,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF64748B),
+                                letterSpacing: 0.5,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              isConfigured
-                                  ? 'Branch GPS coordinates set for attendance'
-                                  : 'Branch location not yet configured',
+                              _currentBranch?.name ?? 'Head Office',
                               style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Status Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _isConfigured ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: _isConfigured ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _isConfigured ? Icons.lock_rounded : Icons.schedule_rounded,
+                              size: 11,
+                              color: _isConfigured ? const Color(0xFF059669) : const Color(0xFFD97706),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _isConfigured ? 'Configured' : 'Setup Required',
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: AppColors.textMuted,
+                                fontWeight: FontWeight.bold,
+                                color: _isConfigured ? const Color(0xFF059669) : const Color(0xFFD97706),
                               ),
                             ),
                           ],
@@ -576,214 +461,432 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
                 ),
                 const SizedBox(height: 16),
 
-                // Coordinates Row
-                Row(
+                // Content Based on Configuration State
+                if (_isConfigured) ...[
+                  // Locked View
+                  _buildConfiguredLockedView(),
+                ] else ...[
+                  // Setup / First-Time Form View
+                  _buildFirstTimeSetupView(),
+                ],
+              ],
+            ),
+    );
+  }
+
+  /// View when coordinates are already configured and locked
+  Widget _buildConfiguredLockedView() {
+    final latStr = _currentBranch!.latitude!.toStringAsFixed(6);
+    final lngStr = _currentBranch!.longitude!.toStringAsFixed(6);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Locked notice card
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0FDF4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFBBF7D0)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFDCFCE7),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.verified_user_rounded,
+                  color: Color(0xFF059669),
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text(
-                                'Latitude',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              if (isLocked) ...[
-                                const SizedBox(width: 4),
-                                const Icon(Icons.lock_rounded, size: 12, color: Colors.grey),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: _latController,
-                            readOnly: isLocked,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                              signed: true,
-                            ),
-                            style: TextStyle(
-                              color: isLocked ? Colors.grey.shade700 : AppColors.textPrimary,
-                              fontWeight: isLocked ? FontWeight.w600 : FontWeight.normal,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'e.g. 10.0152',
-                              isDense: true,
-                              filled: isLocked,
-                              fillColor: isLocked ? Colors.grey.shade100 : Colors.white,
-                              suffixIcon: isLocked
-                                  ? const Icon(Icons.lock_outline_rounded, size: 16, color: Colors.grey)
-                                  : null,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(
-                                  color: AppColors.cardBorder,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                    Text(
+                      'Branch Location Configured',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF166534),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text(
-                                'Longitude',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              if (isLocked) ...[
-                                const SizedBox(width: 4),
-                                const Icon(Icons.lock_rounded, size: 12, color: Colors.grey),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: _lngController,
-                            readOnly: isLocked,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                              signed: true,
-                            ),
-                            style: TextStyle(
-                              color: isLocked ? Colors.grey.shade700 : AppColors.textPrimary,
-                              fontWeight: isLocked ? FontWeight.w600 : FontWeight.normal,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'e.g. 76.3524',
-                              isDense: true,
-                              filled: isLocked,
-                              fillColor: isLocked ? Colors.grey.shade100 : Colors.white,
-                              suffixIcon: isLocked
-                                  ? const Icon(Icons.lock_outline_rounded, size: 16, color: Colors.grey)
-                                  : null,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(
-                                  color: AppColors.cardBorder,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                    SizedBox(height: 3),
+                    Text(
+                      'GPS coordinates are configured for this branch. For attendance security and accuracy, coordinates are locked in the mobile app.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.4,
+                        color: Color(0xFF15803D),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
 
-                // Capture GPS Button (only if not locked)
-                if (!isLocked) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isLocating ? null : _captureCurrentLocation,
-                      icon: _isLocating
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.my_location_rounded, size: 18),
-                      label: Text(
-                        _isLocating
-                            ? 'Detecting Location...'
-                            : 'Use Current Device Location',
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.primary),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
+        // Coordinates Display Grid
+        Row(
+          children: [
+            Expanded(
+              child: _buildCoordinateTile(
+                icon: Icons.explore_rounded,
+                iconColor: const Color(0xFF4F46E5),
+                iconBg: const Color(0xFFEEF2FF),
+                label: 'LATITUDE',
+                value: latStr,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildCoordinateTile(
+                icon: Icons.navigation_rounded,
+                iconColor: const Color(0xFF0284C7),
+                iconBg: const Color(0xFFE0F2FE),
+                label: 'LONGITUDE',
+                value: lngStr,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
 
-                // Action Button: Save (if unlocked) or Locked Badge (if locked)
-                if (isLocked)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.lock_rounded, size: 18, color: Colors.grey.shade600),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Location Locked (Backend Admin Only)',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isSaving ? null : _saveLocation,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: _isSaving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Save Branch Location',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                    ),
+        // Done button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.check_rounded, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'Close',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
+                ),
               ],
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCoordinateTile({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, color: iconColor, size: 14),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF64748B),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const Spacer(),
+              const Icon(Icons.lock_rounded, size: 12, color: Color(0xFF94A3B8)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF0F172A),
+              fontFamily: 'monospace',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// View when coordinates are not yet configured: allows setup
+  Widget _buildFirstTimeSetupView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Setup warning banner
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFFDE68A)),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                color: Color(0xFFD97706),
+                size: 18,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Enter or detect the office GPS coordinates for this branch. Once saved, coordinates will be locked.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    height: 1.4,
+                    color: Color(0xFFB45309),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Coordinates Input Row
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Latitude',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _latController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0F172A),
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. 10.0152',
+                      hintStyle: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF94A3B8),
+                        fontWeight: FontWeight.normal,
+                      ),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.explore_outlined,
+                        size: 18,
+                        color: Color(0xFF64748B),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Longitude',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _lngController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0F172A),
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. 76.3524',
+                      hintStyle: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF94A3B8),
+                        fontWeight: FontWeight.normal,
+                      ),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.navigation_outlined,
+                        size: 18,
+                        color: Color(0xFF64748B),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Detect GPS Button
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _isLocating ? null : _captureCurrentLocation,
+            icon: _isLocating
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF4F46E5),
+                    ),
+                  )
+                : const Icon(Icons.my_location_rounded, size: 18),
+            label: Text(
+              _isLocating ? 'Detecting Location...' : 'Use Current Device Location',
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF4F46E5),
+              side: const BorderSide(color: Color(0xFF6366F1)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // Save Button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isSaving ? null : _saveLocation,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7C3AED),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: _isSaving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.save_rounded, color: Colors.white, size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'Save Branch Location',
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
     );
   }
 }

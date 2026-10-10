@@ -16,38 +16,114 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _employeeService = EmployeeService();
+
   UserModel? _user;
   EmployeeDetailsModel? _employeeDetails;
 
   bool _biometricLogin = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _loadSettingsData();
   }
 
-  Future<void> _loadUserData() async {
-    final user = await LocalStorageService.getUser();
-    final details = await _employeeService.fetchEmployeeDashboard();
-    if (mounted) {
-      setState(() {
-        _user = user;
-        _employeeDetails = details;
-      });
+  Future<void> _loadSettingsData() async {
+    setState(() => _isLoading = true);
+    try {
+      final results = await Future.wait([
+        LocalStorageService.getUser(),
+        _employeeService.fetchEmployeeDashboard(),
+      ]);
+
+      final user = results[0] as UserModel?;
+      final details = results[1] as EmployeeDetailsModel?;
+
+      if (mounted) {
+        setState(() {
+          _user = user;
+          _employeeDetails = details;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  String get _userName {
+    if (_employeeDetails != null && _employeeDetails!.name.isNotEmpty) {
+      return _employeeDetails!.name;
+    }
+    if (_user != null && _user!.userName.isNotEmpty) {
+      return _user!.userName;
+    }
+    return 'Employee';
+  }
+
+  String get _userDesignation {
+    if (_employeeDetails != null && _employeeDetails!.designation.isNotEmpty) {
+      return _employeeDetails!.designation;
+    }
+    return 'Team Member';
+  }
+
+  String get _userAvatarLetter {
+    final name = _userName.trim();
+    if (name.isNotEmpty) {
+      return name[0].toUpperCase();
+    }
+    return 'U';
+  }
+
+  Future<void> _handleLogout(BuildContext context) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('Sign Out'),
+          content: const Text(
+            'Are you sure you want to sign out from your account?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Sign Out'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      await LocalStorageService.clearUserSession();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Signed out successfully.'),
+            backgroundColor: AppColors.textPrimary,
+          ),
+        );
+        context.go('/login');
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final userName = _employeeDetails?.name.isNotEmpty == true
-        ? _employeeDetails!.name
-        : (_user?.userName.isNotEmpty == true ? _user!.userName : 'Employee');
-    final userDesignation = _employeeDetails?.designation.isNotEmpty == true
-        ? _employeeDetails!.designation
-        : 'Team Member';
-    final userEmail = _employeeDetails?.email ?? '';
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -55,241 +131,152 @@ class _SettingsPageState extends State<SettingsPage> {
           'Settings',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 20,
-            color: Color(0xFF1E293B),
+            fontSize: 18,
+            color: Color(0xFF0F172A),
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              context.go('/dashboard');
+            }
+          },
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(color: const Color(0xFFE2E8F0), height: 1),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.only(
-          left: 16.0,
-          right: 16.0,
-          top: 16.0,
-          bottom: MediaQuery.of(context).padding.bottom + 24,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Mini Profile Header Card
-            _buildProfileBanner(context, userName, userDesignation, userEmail),
-            const SizedBox(height: 22),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _loadSettingsData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.only(
+                  left: 16.0,
+                  right: 16.0,
+                  top: 16.0,
+                  bottom: MediaQuery.of(context).padding.bottom + 24,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. Profile Banner matching Drawer Profile Header
+                    _buildProfileBanner(context),
+                    const SizedBox(height: 22),
 
-            // 2. Office & Location
-            _buildSectionHeader('OFFICE & LOCATION'),
-            const SizedBox(height: 8),
-            _SettingsCard(
-              children: [
-                _SettingsActionTile(
-                  icon: Icons.add_location_alt_rounded,
-                  iconBg: const Color(0xFFF5F3FF),
-                  iconColor: const Color(0xFF7C3AED),
-                  title: 'Configure Branch Location',
-                  subtitle: 'Set office GPS coordinates for geofenced check-in',
-                  trailing: const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF94A3B8),
-                    size: 22,
-                  ),
-                  onTap: () => BranchLocationSheet.show(context),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-
-            // 3. Security & App
-            _buildSectionHeader('SECURITY & APP'),
-            const SizedBox(height: 8),
-            _SettingsCard(
-              children: [
-                _SettingsSwitchTile(
-                  icon: Icons.fingerprint_rounded,
-                  iconBg: const Color(0xFFECFDF5),
-                  iconColor: const Color(0xFF059669),
-                  title: 'Biometric Login',
-                  subtitle: 'Use Fingerprint / Face ID for quick login',
-                  value: _biometricLogin,
-                  onChanged: (val) => setState(() => _biometricLogin = val),
-                ),
-                const _SettingsDivider(),
-                _SettingsActionTile(
-                  icon: Icons.lock_outline_rounded,
-                  iconBg: const Color(0xFFFFFBEB),
-                  iconColor: const Color(0xFFD97706),
-                  title: 'Change Password',
-                  subtitle: 'Update your login credentials',
-                  trailing: const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF94A3B8),
-                    size: 22,
-                  ),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Password management is maintained via company portal.',
-                        ),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  },
-                ),
-                const _SettingsDivider(),
-                _SettingsActionTile(
-                  icon: Icons.translate_rounded,
-                  iconBg: const Color(0xFFECFEFF),
-                  iconColor: const Color(0xFF0891B2),
-                  title: 'App Language',
-                  subtitle: 'Select preferred system language',
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'English',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF475569),
-                      ),
-                    ),
-                  ),
-                  onTap: () {},
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-
-            // 5. Support & About
-            _buildSectionHeader('SUPPORT & ABOUT'),
-            const SizedBox(height: 8),
-            _SettingsCard(
-              children: [
-                _SettingsActionTile(
-                  icon: Icons.help_outline_rounded,
-                  iconBg: const Color(0xFFF0FDF4),
-                  iconColor: const Color(0xFF16A34A),
-                  title: 'Help & Feedback',
-                  subtitle: 'Guides and contact support',
-                  trailing: const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF94A3B8),
-                    size: 22,
-                  ),
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        title: const Text('Help & Support'),
-                        content: const Text(
-                          'For questions or assistance with your Dream Team HRMS account, please contact your company HR department or administrator.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('OK'),
+                    // 2. Office & Location
+                    _buildSectionHeader('WORKSPACE & LOCATION'),
+                    const SizedBox(height: 8),
+                    _SettingsCard(
+                      children: [
+                        _SettingsActionTile(
+                          icon: Icons.add_location_alt_rounded,
+                          iconBg: const Color(0xFFF5F3FF),
+                          iconColor: const Color(0xFF7C3AED),
+                          title: 'Configure Branch Location',
+                          subtitle: 'Set office GPS coordinates for attendance',
+                          trailing: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: Color(0xFF94A3B8),
+                            size: 20,
                           ),
-                        ],
-                      ),
-                    );
-                  },
+                          onTap: () => BranchLocationSheet.show(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+
+                    // 3. Security & App Preferences
+                    _buildSectionHeader('SECURITY & PREFERENCES'),
+                    const SizedBox(height: 8),
+                    _SettingsCard(
+                      children: [
+                        _SettingsSwitchTile(
+                          icon: Icons.fingerprint_rounded,
+                          iconBg: const Color(0xFFECFDF5),
+                          iconColor: const Color(0xFF059669),
+                          title: 'Biometric Login',
+                          subtitle: 'Use Fingerprint / Face ID for quick punch',
+                          value: _biometricLogin,
+                          onChanged: (val) => setState(() => _biometricLogin = val),
+                        ),
+                        const _SettingsDivider(),
+                        _SettingsActionTile(
+                          icon: Icons.lock_outline_rounded,
+                          iconBg: const Color(0xFFFFFBEB),
+                          iconColor: const Color(0xFFD97706),
+                          title: 'Change Password',
+                          subtitle: 'Update your login credentials',
+                          trailing: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: Color(0xFF94A3B8),
+                            size: 20,
+                          ),
+                          onTap: () => context.push('/change-password'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+
+                    // 4. Sign Out Section matching Drawer
+                    _buildSectionHeader('ACCOUNT SESSION'),
+                    const SizedBox(height: 8),
+                    _buildSignOutTile(context),
+                  ],
                 ),
-                const _SettingsDivider(),
-                _SettingsActionTile(
-                  icon: Icons.info_outline_rounded,
-                  iconBg: const Color(0xFFF8FAFC),
-                  iconColor: const Color(0xFF64748B),
-                  title: 'App Version',
-                  subtitle: 'Cryptone Dream Team HRMS',
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEEF2FF),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFC7D2FE)),
-                    ),
-                    child: const Text(
-                      'v1.0.4',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                  onTap: null,
-                ),
-              ],
+              ),
             ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
     );
   }
 
-  Widget _buildProfileBanner(
-    BuildContext context,
-    String name,
-    String designation,
-    String email,
-  ) {
+  Widget _buildProfileBanner(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Colors.black.withValues(alpha: 0.025),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Row(
         children: [
-          // Silhouette Avatar matching web profile design
+          // Squircle Avatar matching Dashboard & Drawer
           Container(
-            width: 52,
-            height: 52,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFF6B8AFD), width: 2),
-            ),
-            padding: const EdgeInsets.all(2.5),
-            child: Container(
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFF384967),
+              color: AppColors.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.2),
               ),
-              child: const Icon(
-                Icons.person,
-                size: 30,
-                color: Color(0xFFE2E8F0),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              _userAvatarLetter,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
               ),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
 
           // User details
           Expanded(
@@ -297,76 +284,131 @@ class _SettingsPageState extends State<SettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  name,
+                  _userName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                    letterSpacing: -0.2,
+                    color: Color(0xFF0F172A),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  designation,
+                  _userDesignation,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
                     color: Color(0xFF64748B),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                if (email.isNotEmpty) ...[
-                  const SizedBox(height: 1),
-                  Text(
-                    email,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
 
           // Profile View Chip
-          InkWell(
-            onTap: () => context.go('/profile'),
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFBFDBFE)),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Profile',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2563EB),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => context.go('/profile'),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Profile',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 2),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 16,
-                    color: Color(0xFF2563EB),
-                  ),
-                ],
+                    SizedBox(width: 2),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSignOutTile(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _handleLogout(context),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF2F2),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFFEE2E2)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: Color(0xFFDC2626),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF991B1B),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'End current session securely',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Color(0xFFB91C1C),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFFEF4444),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -380,7 +422,7 @@ class _SettingsPageState extends State<SettingsPage> {
           fontSize: 11,
           fontWeight: FontWeight.bold,
           letterSpacing: 0.8,
-          color: Color(0xFF64748B),
+          color: Color(0xFF94A3B8),
         ),
       ),
     );
@@ -503,48 +545,51 @@ class _SettingsActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(10),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
               ),
-              child: Icon(icon, color: iconColor, size: 20),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1E293B),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E293B),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      color: Color(0xFF64748B),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: Color(0xFF64748B),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            ?trailing,
-          ],
+              ?trailing,
+            ],
+          ),
         ),
       ),
     );

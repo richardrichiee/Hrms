@@ -1,8 +1,14 @@
+# ==========================================
+# Flutter / Dart Official Gitignore
+# ==========================================
+
 # Miscellaneous
 *.class
 *.log
 *.pyc
 *.swp
+*.swo
+*~
 .DS_Store
 .atom/
 .build/
@@ -12,37 +18,85 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# IDE & Editors
 *.iml
 *.ipr
 *.iws
 .idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
+# Flutter / Dart Build & Cache
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
 /build/
 /coverage/
 
-# Symbolication related
-app.*.symbols
+# Web
+lib/generated_plugin_registrant.dart
 
-# Obfuscation related
+# Symbolication & Obfuscation
+app.*.symbols
 app.*.map.json
 
-# Android Studio will place build artifacts here
+# Android
 /android/app/debug
 /android/app/profile
 /android/app/release
+.gradle/
+android/.gradle/
+android/local.properties
+android/captures/
+android/key.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+*.jks
+*.keystore
 
-# Root screenshots / test artifacts
-/*.png
+# iOS & macOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/ServiceDefinitions.json
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Windows system files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# Environment & Secrets
+.env
+.env.*
+*.env
+
+# Screenshots and scratch images (protect app icons & assets)
+*.png
+*.jpg
+*.jpeg
+*.webp
+!**/res/**
+!**/Assets.xcassets/**
+!**/icons/**
+!**/assets/**

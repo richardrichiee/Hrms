@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../profile/data/models/employee_details_model.dart';
 import '../../../profile/data/services/employee_service.dart';
-import '../widgets/apply_leave_dialog.dart';
+import 'leave_type_details_page.dart';
 
 class ApplyLeavePage extends StatefulWidget {
   const ApplyLeavePage({super.key});
@@ -46,62 +46,125 @@ class _ApplyLeavePageState extends State<ApplyLeavePage> {
     return '$val Days';
   }
 
-  void _openApplyModal(BuildContext context, String leaveId) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ApplyLeaveDialog(initialLeaveId: leaveId),
-    ).then((result) {
-      if (context.mounted && result == true) {
-        Navigator.pop(context, true);
-      }
+  void _navigateToLeaveType({
+    required String leaveId,
+    required String leaveName,
+    required IconData icon,
+    required Color color,
+    required String description,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LeaveTypeDetailsPage(
+          leaveId: leaveId,
+          leaveName: leaveName,
+          icon: icon,
+          color: color,
+          description: description,
+        ),
+      ),
+    ).then((_) {
+      _loadBalances();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Apply Leave')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select Leave Category',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: const Text(
+          'Apply Leave',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _loadBalances,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Select Leave Category',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Choose the type of leave you wish to apply for',
-              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 20),
+              const SizedBox(height: 6),
+              const Text(
+                'Choose a category to view your taken leaves and apply for new requests',
+                style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 20),
 
-            // Casual Leave Card
-            _LeaveCategoryCard(
-              title: 'Casual Leave',
-              balanceText: _formatBalance(1),
-              icon: Icons.flight_takeoff_rounded,
-              color: const Color(0xFF1E88E5),
-              onTap: () => _openApplyModal(context, '1'),
-            ),
-            const SizedBox(height: 14),
+              // Casual Leave Card
+              _LeaveCategoryCard(
+                title: 'Casual Leave',
+                balanceText: _formatBalance(1),
+                icon: Icons.flight_takeoff_rounded,
+                color: const Color(0xFF1E88E5),
+                onTap: () => _navigateToLeaveType(
+                  leaveId: '1',
+                  leaveName: 'Casual Leave',
+                  icon: Icons.flight_takeoff_rounded,
+                  color: const Color(0xFF1E88E5),
+                  description:
+                      'Casual leave is provided for unexpected events, urgent personal matters, or brief planned time off.',
+                ),
+              ),
+              const SizedBox(height: 14),
 
-            // Sick Leave Card
-            _LeaveCategoryCard(
-              title: 'Sick Leave',
-              balanceText: _formatBalance(2),
-              icon: Icons.local_hospital_outlined,
-              color: const Color(0xFF0D9488),
-              onTap: () => _openApplyModal(context, '2'),
-            ),
-          ],
+              // Sick Leave Card
+              _LeaveCategoryCard(
+                title: 'Sick Leave',
+                balanceText: _formatBalance(2),
+                icon: Icons.local_hospital_outlined,
+                color: const Color(0xFF0D9488),
+                onTap: () => _navigateToLeaveType(
+                  leaveId: '2',
+                  leaveName: 'Sick Leave',
+                  icon: Icons.local_hospital_outlined,
+                  color: const Color(0xFF0D9488),
+                  description:
+                      'Sick leave is dedicated to medical recovery, illness, consultations, and personal health needs.',
+                ),
+              ),
+
+              // Extra dynamic categories if present in balance response
+              if (_leaveBalances != null)
+                ..._leaveBalances!
+                    .where((b) =>
+                        b.leaveId != 1 &&
+                        b.leaveId != 2 &&
+                        b.leaveName.trim().isNotEmpty)
+                    .map((b) => Padding(
+                          padding: const EdgeInsets.only(top: 14),
+                          child: _LeaveCategoryCard(
+                            title: b.leaveName,
+                            balanceText:
+                                '${(b.closing % 1 == 0) ? b.closing.toInt() : b.closing} ${(b.closing == 1) ? "Day" : "Days"}',
+                            icon: Icons.calendar_month_outlined,
+                            color: const Color(0xFF7C3AED),
+                            onTap: () => _navigateToLeaveType(
+                              leaveId: b.leaveId.toString(),
+                              leaveName: b.leaveName,
+                              icon: Icons.calendar_month_outlined,
+                              color: const Color(0xFF7C3AED),
+                              description:
+                                  '${b.leaveName} allocation for employees.',
+                            ),
+                          ),
+                        )),
+            ],
+          ),
         ),
       ),
     );
