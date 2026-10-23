@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/storage/local_storage_service.dart';
 import '../../data/services/access_point_service.dart';
 import '../../data/services/auth_service.dart';
@@ -86,7 +87,8 @@ class _LoginPageState extends State<LoginPage> {
 
     if (username.isEmpty || password.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter both your work email/username and password';
+        _errorMessage =
+            'Please enter both your work email/username and password';
       });
       return;
     }
@@ -123,7 +125,9 @@ class _LoginPageState extends State<LoginPage> {
         SnackBar(
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           backgroundColor: const Color(0xFF081735),
           content: Row(
             children: [
@@ -135,7 +139,11 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check_rounded, color: Colors.white, size: 14),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Colors.white,
+                  size: 14,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -164,7 +172,7 @@ class _LoginPageState extends State<LoginPage> {
     if (_companyImageUrl != null && _companyImageUrl!.isNotEmpty) {
       return Image.network(
         _companyImageUrl!,
-        height: 30,
+        height: 58,
         fit: BoxFit.contain,
         errorBuilder: (context, error, stackTrace) => _buildAssetLogo(),
       );
@@ -174,37 +182,17 @@ class _LoginPageState extends State<LoginPage> {
 
   Widget _buildAssetLogo() {
     return Image.asset(
-      'assets/images/cryptone_logo.png',
-      height: 30,
+      'assets/images/ally_one_dream_team.png',
+      height: 58,
       fit: BoxFit.contain,
-      errorBuilder: (context, error, stackTrace) => Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            decoration: const BoxDecoration(
-              color: Color(0xFF004AC6),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.hub_rounded,
-              color: Colors.white,
-              size: 15,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'cryptone',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF0F172A),
-              letterSpacing: -0.5,
-            ),
-          ),
-        ],
+      errorBuilder: (context, error, stackTrace) => Text(
+        AppConstants.appName,
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          color: const Color(0xFF0F172A),
+          letterSpacing: -0.5,
+        ),
       ),
     );
   }
@@ -217,7 +205,10 @@ class _LoginPageState extends State<LoginPage> {
         child: Center(
           child: SingleChildScrollView(
             physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 20.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 28.0,
+              vertical: 20.0,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
@@ -227,14 +218,12 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 12),
 
                   // 1. Authentic Brand Logo (Clean, borderless, spacious)
-                  Center(
-                    child: _buildCompanyLogo(),
-                  ),
-                  const SizedBox(height: 32),
+                  Center(child: _buildCompanyLogo()),
+                  const SizedBox(height: 24),
 
                   // 2. Editorial Apple-style Typography
                   Text(
-                    'Welcome to Cryptone',
+                    'Welcome!',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 27,
@@ -264,7 +253,7 @@ class _LoginPageState extends State<LoginPage> {
                       Padding(
                         padding: const EdgeInsets.only(left: 4.0, bottom: 6.0),
                         child: Text(
-                          'Work email',
+                          'Login ID',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -287,7 +276,9 @@ class _LoginPageState extends State<LoginPage> {
                           boxShadow: _usernameFocusNode.hasFocus
                               ? [
                                   BoxShadow(
-                                    color: const Color(0xFF1C64F2).withValues(alpha: 0.1),
+                                    color: const Color(
+                                      0xFF1C64F2,
+                                    ).withValues(alpha: 0.1),
                                     blurRadius: 10,
                                     offset: const Offset(0, 2),
                                   ),
@@ -347,7 +338,9 @@ class _LoginPageState extends State<LoginPage> {
                           boxShadow: _passwordFocusNode.hasFocus
                               ? [
                                   BoxShadow(
-                                    color: const Color(0xFF1C64F2).withValues(alpha: 0.1),
+                                    color: const Color(
+                                      0xFF1C64F2,
+                                    ).withValues(alpha: 0.1),
                                     blurRadius: 10,
                                     offset: const Offset(0, 2),
                                   ),
@@ -402,7 +395,10 @@ class _LoginPageState extends State<LoginPage> {
                   // Error Message Banner (if any)
                   if (_errorMessage != null) ...[
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEF2F2),
@@ -411,8 +407,11 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline_rounded,
-                              size: 18, color: Color(0xFFDC2626)),
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            size: 18,
+                            color: Color(0xFFDC2626),
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -429,64 +428,51 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ],
 
-                  // 4. Utility Row: Remember Me & Forgot Password
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _rememberMe = !_rememberMe;
-                          });
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: Checkbox(
-                                value: _rememberMe,
-                                activeColor: const Color(0xFF1C64F2),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                side: const BorderSide(
-                                  color: Color(0xFFCBD5E1),
-                                  width: 1.2,
-                                ),
-                                onChanged: (val) {
-                                  setState(() {
-                                    _rememberMe = val ?? false;
-                                  });
-                                },
+                  // 4. Utility Row: Remember Me
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _rememberMe = !_rememberMe;
+                        });
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: Checkbox(
+                              value: _rememberMe,
+                              activeColor: const Color(0xFF1C64F2),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(4),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Remember me',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 13,
-                                fontWeight: FontWeight.normal,
-                                color: const Color(0xFF475569),
+                              side: const BorderSide(
+                                color: Color(0xFFCBD5E1),
+                                width: 1.2,
                               ),
+                              onChanged: (val) {
+                                setState(() {
+                                  _rememberMe = val ?? false;
+                                });
+                              },
                             ),
-                          ],
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => context.push('/change-password'),
-                        child: Text(
-                          'Forgot password?',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF475569),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Remember me',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.normal,
+                              color: const Color(0xFF475569),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 20),
 
@@ -507,7 +493,9 @@ class _LoginPageState extends State<LoginPage> {
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF1C64F2).withValues(alpha: 0.32),
+                          color: const Color(
+                            0xFF1C64F2,
+                          ).withValues(alpha: 0.32),
                           blurRadius: 18,
                           offset: const Offset(0, 6),
                         ),
@@ -567,58 +555,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 36),
-
-                  // 6. Refined Apple-style Quiet Footnote
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.lock_outline,
-                        size: 13,
-                        color: Color(0xFF94A3B8),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Encrypted & Secure',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Text(
-                          '•',
-                          style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => context.go('/company-access'),
-                        child: Text(
-                          'Change Access Code',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Native iOS Home Indicator Bar
-                  Center(
-                    child: Container(
-                      width: 144,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFCBD5E1),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),

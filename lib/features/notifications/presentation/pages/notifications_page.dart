@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../core/storage/local_storage_service.dart';
 import '../../data/services/inbox_service.dart';
 import 'inbox_category_details_page.dart';
 
@@ -22,7 +23,18 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Future<void> _loadCategories() async {
+    final ap = await LocalStorageService.getAccessPoint();
+    final user = await LocalStorageService.getUser();
     final list = await _inboxService.fetchInboxSummary();
+
+    debugPrint('====================================================');
+    debugPrint('📬 [NOTIFICATIONS PAGE - INBOX SUMMARY]');
+    debugPrint('🏢 AccessPoint: $ap | User: ${user?.userName} (ID: ${user?.userId})');
+    debugPrint('📋 Raw Categories Count: ${list.length}');
+    for (int i = 0; i < list.length; i++) {
+      debugPrint('   [$i] Menu: "${list[i]['Menu']}", MenuCode: "${list[i]['MenuCode']}", MenuLinkCode: "${list[i]['MenuLinkCode']}", Cnt: "${list[i]['Cnt']}"');
+    }
+    debugPrint('====================================================');
 
     if (mounted) {
       setState(() {
@@ -32,6 +44,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
           return menuCode == '19' ||
               menuCode == '15' ||
               menuTitle.contains('leave') ||
+              menuTitle.contains('cancel') ||
+              menuTitle.contains('cancellation') ||
               menuTitle.contains('claim') ||
               menuTitle.contains('expense') ||
               menuTitle.contains('reimbursement');
@@ -43,7 +57,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   IconData _getCategoryIcon(String menuName, String menuCode) {
     final name = menuName.toLowerCase();
-    if (name.contains('leave')) {
+    if (name.contains('cancel') || name.contains('cancellation')) {
+      return Icons.event_busy_rounded;
+    } else if (name.contains('leave')) {
       return Icons.event_note_rounded;
     } else if (name.contains('claim') || name.contains('expense')) {
       return Icons.receipt_long_rounded;

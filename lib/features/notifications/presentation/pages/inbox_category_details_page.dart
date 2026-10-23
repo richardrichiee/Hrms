@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../core/storage/local_storage_service.dart';
 import '../../../auth/data/models/user_rights_model.dart';
 import '../../../auth/data/services/user_rights_service.dart';
 import '../../../claims/data/services/claim_service.dart';
+import '../../../claims/presentation/pages/claim_approval_details_page.dart';
 import '../../../leave/data/services/leave_service.dart';
 import '../../data/services/inbox_service.dart';
 
@@ -53,6 +55,18 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
     final list = results[0] as List<Map<String, dynamic>>;
     final rights = results[1] as UserRightsModel?;
 
+    final ap = await LocalStorageService.getAccessPoint();
+    final user = await LocalStorageService.getUser();
+    debugPrint('====================================================');
+    debugPrint('📂 [INBOX CATEGORY: "${widget.title}"]');
+    debugPrint('🏢 AccessPoint: $ap | User: ${user?.userName} (UserID: ${user?.userId})');
+    debugPrint('🔢 MenuCode: ${widget.menuCode}, MenuLinkCode: ${widget.menuLinkCode}');
+    debugPrint('📋 Items Count from Server: ${list.length}');
+    for (int i = 0; i < list.length; i++) {
+      debugPrint('   👉 [$i] ${list[i]}');
+    }
+    debugPrint('====================================================');
+
     final isLeave = widget.menuCode == '19' ||
         widget.title.toLowerCase().contains('leave') ||
         list.any((i) => i.containsKey('LeaveType'));
@@ -68,8 +82,10 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
           if (id > 0) {
             try {
               final leaveDetails = await _leaveService.fetchLeaveApplicationDetails(id);
-              if (leaveDetails != null && leaveDetails.reason.trim().isNotEmpty) {
-                item['Reason'] = leaveDetails.reason.trim();
+              if (leaveDetails != null) {
+                if (leaveDetails.reason.trim().isNotEmpty) {
+                  item['Reason'] = leaveDetails.reason.trim();
+                }
               }
             } catch (_) {}
           }
@@ -205,7 +221,7 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Are you sure you want to $actionTitle request #$id for ${currentItem['applicant']}?',
+              'Are you sure you want to $actionTitle the request for ${currentItem['applicant']}?',
             ),
             if (currentItem['reason'] != null &&
                 (currentItem['reason'] as String).trim().isNotEmpty) ...[
@@ -273,8 +289,35 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
     final messenger = ScaffoldMessenger.of(context);
     bool success = false;
     final titleLower = widget.title.toLowerCase();
+    final isCancellation =
+        titleLower.contains('cancel') || titleLower.contains('cancellation');
 
-    if (widget.menuCode == '19' || titleLower.contains('leave')) {
+    if (isCancellation) {
+      final raw = currentItem['raw'] as Map<String, dynamic>?;
+      final lvCancelId = int.tryParse(
+              raw?['LvCancelID']?.toString() ??
+              raw?['Key']?.toString() ??
+              raw?['ID']?.toString() ??
+              id.toString()) ??
+          id;
+      final lvAppId = raw?['LvApplicationID']?.toString() ??
+          raw?['LvApplicationId']?.toString() ??
+          raw?['LeaveApplicationID']?.toString() ??
+          raw?['LeaveID']?.toString() ??
+          id.toString();
+
+      success = await _leaveService.saveLeaveCancellation(
+        lvApplicationId: lvAppId,
+        cancellationId: lvCancelId,
+        remarks: action == 'A'
+            ? 'Approved via Mobile App'
+            : action == 'F'
+                ? 'Forwarded via Mobile App'
+                : 'Rejected via Mobile App',
+        approvalStatus: action,
+        itemData: currentItem,
+      );
+    } else if (widget.menuCode == '19' || titleLower.contains('leave')) {
       success = await _leaveService.approveOrForwardLeave(
         key: id,
         approvalStatus: action,
@@ -286,31 +329,36 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
         approvalStatus: action,
         itemData: currentItem,
       );
-    } else if (titleLower.contains('cancel') ||
-        titleLower.contains('cancellation')) {
-      success = await _leaveService.saveLeaveCancellation(
-        lvApplicationId: id.toString(),
-        remarks: action == 'A'
-            ? 'Approved via Mobile App'
-            : action == 'F'
-                ? 'Forwarded via Mobile App'
-                : 'Rejected via Mobile App',
-        approvalStatus: action,
-      );
     }
 
     if (mounted) {
       setState(() {
         _processingIds.remove(id);
-        _items.removeWhere((element) => element['id'] == id);
+        if (success) {
+          _items.removeWhere((element) => element['id'] == id);
+        }
       });
+
+      final actionWord = action == 'A'
+          ? 'approved'
+          : action == 'F'
+              ? 'forwarded'
+              : 'rejected';
+
+      final categoryLabel = isCancellation
+          ? 'Leave cancellation'
+          : (widget.menuCode == '19' || titleLower.contains('leave'))
+              ? 'Leave application'
+              : (widget.menuCode == '15' || titleLower.contains('claim'))
+                  ? 'Claim application'
+                  : 'Request';
 
       messenger.showSnackBar(
         SnackBar(
           content: Text(
             success
-                ? 'Request #$id $actionTitle in database successfully!'
-                : 'Request #$id marked as $actionTitle.',
+                ? '$categoryLabel $actionWord successfully!'
+                : 'Failed to process request. Please try again.',
           ),
           backgroundColor: action == 'A'
               ? Colors.green
@@ -320,6 +368,27 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
           duration: const Duration(seconds: 2),
         ),
       );
+    }
+  }
+
+  Future<void> _openClaimDetails(Map<String, dynamic> item) async {
+    final itemId = item['id'] as int;
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ClaimApprovalDetailsPage(
+          claimId: itemId,
+          itemData: item,
+          userRights: _userRights,
+        ),
+      ),
+    );
+
+    if (updated == true && mounted) {
+      setState(() {
+        _items.removeWhere((element) => element['id'] == itemId);
+      });
+      _loadDetails();
     }
   }
 
@@ -368,10 +437,12 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
                         final isRejected = statusStr == 'rejected';
                         final isPending =
                             !isApproved && !isForwarded && !isRejected;
+                        final isClaimCategory = widget.menuCode == '15' ||
+                            widget.title.toLowerCase().contains('claim') ||
+                            item['claimNo'] != null;
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(14),
@@ -384,9 +455,17 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
                               ),
                             ],
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: isClaimCategory ? () => _openClaimDetails(item) : null,
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
@@ -405,25 +484,13 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
                                         ),
                                       ),
                                       const SizedBox(width: 10),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            item['applicant'],
-                                            style: const TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppColors.textPrimary,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Request #${item['id']}',
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: AppColors.textMuted,
-                                            ),
-                                          ),
-                                        ],
+                                      Text(
+                                        item['applicant'],
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -663,10 +730,36 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
                                         },
                                       ),
                               ],
+                              if (isClaimCategory)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: const [
+                                      Text(
+                                        'View Full Breakdown',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Icon(
+                                        Icons.arrow_forward_ios_rounded,
+                                        size: 11,
+                                        color: AppColors.primary,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                             ],
                           ),
-                        );
-                      },
+                        ),
+                      ),
+                    ),
+                  );
+                },
                     ),
             ),
     );

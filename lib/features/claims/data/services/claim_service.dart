@@ -62,9 +62,9 @@ class ClaimService {
         }
       }
 
-      return UserRightsModel.fullAccess();
+      return UserRightsModel.noAccess();
     } catch (e) {
-      return UserRightsModel.fullAccess();
+      return UserRightsModel.noAccess();
     }
   }
 
@@ -89,19 +89,9 @@ class ClaimService {
         }
       }
 
-      return [
-        ClaimMasterItem(value: 1, name: 'Food Expenses'),
-        ClaimMasterItem(value: 2, name: 'Fuel Expenses'),
-        ClaimMasterItem(value: 3, name: 'Other Expenses'),
-        ClaimMasterItem(value: 4, name: 'Transport allowance'),
-      ];
+      return [];
     } catch (e) {
-      return [
-        ClaimMasterItem(value: 1, name: 'Food Expenses'),
-        ClaimMasterItem(value: 2, name: 'Fuel Expenses'),
-        ClaimMasterItem(value: 3, name: 'Other Expenses'),
-        ClaimMasterItem(value: 4, name: 'Transport allowance'),
-      ];
+      return [];
     }
   }
 
@@ -136,9 +126,9 @@ class ClaimService {
         }
       }
 
-      return ClaimRateResult(rate: 100.0, rateFlag: 1);
+      return ClaimRateResult(rate: 0.0, rateFlag: 0);
     } catch (e) {
-      return ClaimRateResult(rate: 100.0, rateFlag: 1);
+      return ClaimRateResult(rate: 0.0, rateFlag: 0);
     }
   }
 
@@ -232,7 +222,7 @@ class ClaimService {
 
       return response.statusCode == 200;
     } catch (e) {
-      return true; // Mock success if offline
+      return false;
     }
   }
 
@@ -385,7 +375,7 @@ class ClaimService {
 
       return response.statusCode == 200;
     } catch (e) {
-      return true;
+      return false;
     }
   }
 

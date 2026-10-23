@@ -101,6 +101,7 @@ class _LeavePageState extends State<LeavePage> {
     if (s == 'A' || s == 'APPROVED' || s == 'APPROVE') return 'Approved';
     if (s == 'R' || s == 'REJECTED' || s == 'REJECT') return 'Rejected';
     if (s == 'F' || s == 'FORWARD' || s == 'FORWARDED') return 'Forwarded';
+    if (s == 'C' || s == 'CANCEL' || s == 'CANCELLED') return 'Cancelled';
     if (s == 'N' || s == 'P' || s == 'PENDING') return 'Pending';
     return rawStatus;
   }
@@ -113,6 +114,8 @@ class _LeavePageState extends State<LeavePage> {
       return Colors.red.withValues(alpha: 0.1);
     } else if (s == 'F' || s == 'FORWARD' || s == 'FORWARDED') {
       return Colors.blue.withValues(alpha: 0.1);
+    } else if (s == 'C' || s == 'CANCEL' || s == 'CANCELLED') {
+      return Colors.grey.withValues(alpha: 0.15);
     }
     return Colors.orange.withValues(alpha: 0.1);
   }
@@ -125,19 +128,25 @@ class _LeavePageState extends State<LeavePage> {
       return Colors.red;
     } else if (s == 'F' || s == 'FORWARD' || s == 'FORWARDED') {
       return Colors.blue;
+    } else if (s == 'C' || s == 'CANCEL' || s == 'CANCELLED') {
+      return Colors.grey;
     }
     return Colors.orange;
   }
 
-  bool _isStatusPending(String? status) {
-    final s = (status ?? '').trim().toUpperCase();
-    return s == 'N' ||
-        s == 'P' ||
-        s == 'PENDING' ||
-        s == 'FORWARD' ||
-        s == 'FORWARDED' ||
-        s == 'F' ||
-        s.isEmpty;
+  bool _isStatusCancellable(String? status) {
+    if (status == null || status.isEmpty) return true;
+    final s = status.trim().toUpperCase();
+    if (s == 'C' ||
+        s == 'CANCEL' ||
+        s == 'CANCELLED' ||
+        s == 'R' ||
+        s == 'REJECTED' ||
+        s == 'REJECT') {
+      return false;
+    }
+    // Pending, Forwarded, and Approved requests can all be cancelled by the user
+    return true;
   }
 
   List<LeaveApplicationModel> get _filteredApplications {
@@ -407,7 +416,8 @@ class _LeavePageState extends State<LeavePage> {
                 ? summaryItem.noOfLeaves
                 : (details?.noOfLeaves ?? 1.0);
 
-            final isPending = _isStatusPending(rawStatus);
+            final isCancellable = _isStatusCancellable(rawStatus);
+            final isApproved = approvalStatus == 'Approved';
             final statusBgColor = _getStatusBg(rawStatus);
             final statusTextColor = _getStatusColor(rawStatus);
 
@@ -427,9 +437,9 @@ class _LeavePageState extends State<LeavePage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Application Details #${summaryItem.key}',
-                          style: const TextStyle(
+                        const Text(
+                          'Leave Application Details',
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: AppColors.textPrimary,
@@ -455,10 +465,6 @@ class _LeavePageState extends State<LeavePage> {
                     ),
                     const Divider(height: 24),
                     _DetailRow(
-                      label: 'Applicant',
-                      value: summaryItem.employee,
-                    ),
-                    _DetailRow(
                       label: 'Leave Category',
                       value: summaryItem.leaveName,
                     ),
@@ -480,7 +486,7 @@ class _LeavePageState extends State<LeavePage> {
                       value: reason.isNotEmpty ? reason : 'No reason specified',
                     ),
                     const SizedBox(height: 16),
-                    if (isPending) ...[
+                    if (isCancellable) ...[
                       Row(
                         children: [
                           Expanded(
@@ -507,8 +513,9 @@ class _LeavePageState extends State<LeavePage> {
                                         Text('Cancel Leave Request'),
                                       ],
                                     ),
-                                    content: Text(
-                                        'Are you sure you want to cancel leave application #${summaryItem.key}?'),
+                                    content: Text(isApproved
+                                        ? 'Are you sure you want to cancel this approved leave application?'
+                                        : 'Are you sure you want to cancel this leave application?'),
                                     actions: [
                                       TextButton(
                                         onPressed: () =>
@@ -531,20 +538,53 @@ class _LeavePageState extends State<LeavePage> {
 
                                 final messenger = ScaffoldMessenger.of(context);
                                 Navigator.pop(context);
+
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        SizedBox(width: 12),
+                                        Text('Cancelling leave request...'),
+                                      ],
+                                    ),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+
                                 final success =
                                     await _leaveService.saveLeaveCancellation(
                                   lvApplicationId: summaryItem.key.toString(),
                                   remarks: 'Cancel leave request',
                                 );
-                                if (mounted && success) {
-                                  messenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          'Leave Cancellation submitted for approval!'),
-                                      backgroundColor: Colors.orange,
-                                    ),
-                                  );
-                                  _loadLeaveData();
+
+                                if (mounted) {
+                                  messenger.hideCurrentSnackBar();
+                                  if (success) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Leave request cancelled successfully!'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                    _loadLeaveData();
+                                  } else {
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Failed to cancel leave request. Please try again.'),
+                                        backgroundColor: AppColors.error,
+                                      ),
+                                    );
+                                  }
                                 }
                               },
                               child: const Text('Cancel Leave'),
@@ -865,7 +905,7 @@ class _LeavePageState extends State<LeavePage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            item.employee,
+                                            item.leaveName,
                                             style: const TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 15,
@@ -875,7 +915,7 @@ class _LeavePageState extends State<LeavePage> {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            '${item.leaveName} • ${item.leaveType}',
+                                            item.leaveType,
                                             style: const TextStyle(
                                               fontSize: 12,
                                               fontWeight: FontWeight.w500,

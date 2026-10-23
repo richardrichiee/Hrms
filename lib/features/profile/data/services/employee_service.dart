@@ -45,23 +45,9 @@ class EmployeeService {
         }
       }
 
-      // Fallback model based on logged-in user if backend table is empty
-      return EmployeeDetailsModel(
-        empId: employeeId,
-        empCode: employeeId.toString(),
-        name: user?.userName ?? '',
-        designation: '',
-        contactAddress: '',
-      );
+      return null;
     } catch (e) {
-      final user = await LocalStorageService.getUser();
-      return EmployeeDetailsModel(
-        empId: user?.employeeId ?? 1,
-        empCode: user?.employeeId.toString() ?? '',
-        name: user?.userName ?? '',
-        designation: '',
-        contactAddress: '',
-      );
+      return null;
     }
   }
 }

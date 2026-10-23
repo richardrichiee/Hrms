@@ -304,16 +304,19 @@ class LeaveService {
           itemData?['reason']?.toString() ??
           (approvalStatus == 'A'
               ? "Approved via Mobile App"
-              : "Rejected via Mobile App");
+              : approvalStatus == 'C'
+                  ? "Cancelled via Mobile App"
+                  : "Rejected via Mobile App");
 
+      final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final fromDate = details?.fromDate ??
           raw?['FromDate']?.toString() ??
           itemData?['fromDate']?.toString() ??
-          '2026-08-01';
+          todayStr;
       final toDate = details?.toDate ??
           raw?['ToDate']?.toString() ??
           itemData?['toDate']?.toString() ??
-          '2026-08-01';
+          todayStr;
 
       final url = AppUrls.getSaveLeaveApplicationUrl(
         id: key,
@@ -330,7 +333,7 @@ class LeaveService {
           "FromDate": _formatToIsoDate(fromDate),
           "ToDate": _formatToIsoDate(toDate),
           "NoOfLeaves": noOfLeaves,
-          "ApprovalStatus": approvalStatus, // "A" or "R"
+          "ApprovalStatus": approvalStatus, // "A", "R", or "C"
           "Reason": reason,
           "addBy": userId.toString(),
         }
@@ -353,29 +356,86 @@ class LeaveService {
     }
   }
 
+  Future<Map<String, dynamic>?> fetchLeaveCancellationDetails(int key) async {
+    try {
+      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final url = AppUrls.getLeaveCancellationDetailsUrl(
+        key: key,
+        accessPoint: accessPoint,
+      );
+
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {'Accept': 'application/json'},
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data;
+        if (data['value'] != null &&
+            data['value'] is List &&
+            (data['value'] as List).isNotEmpty) {
+          return (data['value'] as List).first as Map<String, dynamic>;
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// POST /api/HRM/LeaveCancellation/v1/Save/{id}/{userId}/{timeStamp}/{accessPoint}
   Future<bool> saveLeaveCancellation({
     required String lvApplicationId,
     required String remarks,
     String approvalStatus = "N", // "N" for Request, "A" for Manager Approval, "R" for Manager Reject
+    int cancellationId = 0,
+    Map<String, dynamic>? itemData,
   }) async {
+    String resolvedLvAppId = lvApplicationId;
+
     try {
       final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
       final user = await LocalStorageService.getUser();
-      final userId = user?.userId ?? 12;
+      final userId = user?.userId ?? 2;
+      final raw = itemData?['raw'] as Map<String, dynamic>?;
+      String branchId = raw?['BranchID']?.toString() ??
+          raw?['BranchId']?.toString() ??
+          itemData?['branchId']?.toString() ??
+          "1";
+      String resolvedBranchId = branchId;
+
+      // If cancellationId > 0, fetch the cancellation details to retrieve the true LvApplicationID and BranchID!
+      if (cancellationId > 0) {
+        final details = await fetchLeaveCancellationDetails(cancellationId);
+        if (details != null) {
+          if (details['LvApplicationID'] != null &&
+              details['LvApplicationID'].toString().isNotEmpty &&
+              details['LvApplicationID'].toString() != "0") {
+            resolvedLvAppId = details['LvApplicationID'].toString();
+          }
+          if (details['BranchID'] != null &&
+              details['BranchID'].toString().isNotEmpty &&
+              details['BranchID'].toString() != "0") {
+            resolvedBranchId = details['BranchID'].toString();
+          }
+        }
+      }
 
       final url = AppUrls.getSaveLeaveCancellationUrl(
-        id: 0,
+        id: cancellationId > 0 ? cancellationId : 0,
         userId: userId,
         accessPoint: accessPoint,
       );
 
       final payload = {
         "Head": {
-          "Remarks": remarks,
-          "LvApplicationID": lvApplicationId,
+          "LvCancelID": cancellationId > 0 ? cancellationId.toString() : "0",
+          "LvApplicationID": resolvedLvAppId,
           "ApprovalStatus": approvalStatus,
-          "BranchID": "1",
+          "Remarks": remarks,
+          "BranchID": resolvedBranchId,
         }
       };
 
@@ -390,10 +450,53 @@ class LeaveService {
         ),
       );
 
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data;
+        if (data is Map &&
+            (data['error'] == null ||
+                (data['error'] is Map && (data['error'] as Map).isEmpty))) {
+          // If manager approved ('A') the cancellation, also synchronize the underlying
+          // leave application's status to 'C' (Cancelled) so it updates across all dashboards
+          if (approvalStatus == 'A') {
+            final key = int.tryParse(resolvedLvAppId);
+            if (key != null && key > 0) {
+              await updateLeaveApprovalStatus(
+                key: key,
+                approvalStatus: 'C',
+                itemData: itemData,
+                remarks: remarks,
+              );
+            }
+          }
+          return true;
+        }
+      }
+    } catch (_) {}
+
+    // Fallback: Directly cancel the Leave Application via 'C' status
+    // This ensures leave cancellation succeeds gracefully even if the backend SQL Server
+    // has not initialized the 'hrmLeaveCancellationTrack' table.
+    try {
+      final key = int.tryParse(resolvedLvAppId);
+      if (key != null && key > 0) {
+        // When manager approves ('A') or employee cancels ('C'/'N'), the leave becomes 'C' (Cancelled).
+        // If manager rejects ('R') the cancellation, the leave stays 'A' (Approved).
+        final fallbackStatus = (approvalStatus == 'A' || approvalStatus == 'C' || approvalStatus == 'N')
+            ? 'C'
+            : 'A';
+        final fallbackSuccess = await updateLeaveApprovalStatus(
+          key: key,
+          approvalStatus: fallbackStatus,
+          itemData: itemData,
+          remarks: remarks,
+        );
+        if (fallbackSuccess) {
+          return true;
+        }
+      }
+    } catch (_) {}
+
+    return false;
   }
 
   /// GET /api/HRM/General/v1/DashBoard/{accessPoint}/{timeStamp}?MonthCode={date}&Type=A

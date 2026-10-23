@@ -7,8 +7,13 @@ import '../../data/services/leave_service.dart';
 
 class ApplyLeaveDialog extends StatefulWidget {
   final String? initialLeaveId;
+  final String? initialLeaveName;
 
-  const ApplyLeaveDialog({super.key, this.initialLeaveId});
+  const ApplyLeaveDialog({
+    super.key,
+    this.initialLeaveId,
+    this.initialLeaveName,
+  });
 
   @override
   State<ApplyLeaveDialog> createState() => _ApplyLeaveDialogState();
@@ -212,46 +217,59 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
                 ),
               ),
               const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: _selectedLeaveId == '1'
-                      ? const Color(0xFF1E88E5).withValues(alpha: 0.08)
-                      : const Color(0xFF0D9488).withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _selectedLeaveId == '1'
-                        ? const Color(0xFF1E88E5).withValues(alpha: 0.25)
-                        : const Color(0xFF0D9488).withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _selectedLeaveId == '1'
-                          ? Icons.flight_takeoff_rounded
-                          : Icons.local_hospital_outlined,
-                      size: 18,
-                      color: _selectedLeaveId == '1'
+              Builder(
+                builder: (context) {
+                  final String displayName = widget.initialLeaveName ??
+                      (_selectedLeaveId == '1'
+                          ? 'Casual Leave'
+                          : (_selectedLeaveId == '2' ? 'Sick Leave' : 'Leave'));
+                  final isSick = _selectedLeaveId == '2' ||
+                      displayName.toLowerCase().contains('sick');
+                  final isCasual = _selectedLeaveId == '1' ||
+                      displayName.toLowerCase().contains('casual');
+                  final categoryColor = isSick
+                      ? const Color(0xFF0D9488)
+                      : (isCasual
                           ? const Color(0xFF1E88E5)
-                          : const Color(0xFF0D9488),
+                          : const Color(0xFF7C3AED));
+                  final categoryIcon = isSick
+                      ? Icons.local_hospital_outlined
+                      : (isCasual
+                          ? Icons.flight_takeoff_rounded
+                          : Icons.calendar_month_outlined);
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
                     ),
-                    const SizedBox(width: 10),
-                    Text(
-                      _selectedLeaveId == '1' ? 'Casual Leave' : 'Sick Leave',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: _selectedLeaveId == '1'
-                            ? const Color(0xFF1E88E5)
-                            : const Color(0xFF0D9488),
+                    decoration: BoxDecoration(
+                      color: categoryColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: categoryColor.withValues(alpha: 0.25),
                       ),
                     ),
-                  ],
-                ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          categoryIcon,
+                          size: 18,
+                          color: categoryColor,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          displayName,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: categoryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 16),
 

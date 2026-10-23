@@ -38,10 +38,9 @@ class UserRightsService {
         }
       }
 
-      // Fallback default permissions
-      return UserRightsModel.fullAccess();
+      return UserRightsModel.noAccess();
     } catch (e) {
-      return UserRightsModel.fullAccess();
+      return UserRightsModel.noAccess();
     }
   }
 }

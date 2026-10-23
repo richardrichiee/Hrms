@@ -58,6 +58,11 @@ class AccessPointService {
           final companyImageUrl = firstItem['CompanyImageUrl'] as String?;
 
           if (accessPoint != null && accessPoint.isNotEmpty) {
+            final oldAccessPoint = await LocalStorageService.getAccessPoint();
+            if (oldAccessPoint != null &&
+                oldAccessPoint.toLowerCase() != accessPoint.toLowerCase()) {
+              await LocalStorageService.clearUserSession();
+            }
             // Save to secure local storage
             await LocalStorageService.saveAccessPoint(accessPoint);
             await LocalStorageService.saveAccessId(accessId);

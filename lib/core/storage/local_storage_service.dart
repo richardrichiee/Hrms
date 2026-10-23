@@ -138,6 +138,8 @@ class LocalStorageService {
       await prefs.remove(keyLastPunchDate);
       await prefs.remove(keyLastPunchStatus);
       await prefs.remove(keyLastPunchTime);
+      await prefs.remove(keyCachedBranches);
+      await prefs.remove(keySelectedBranchId);
       await _storage.delete(key: keyUserData);
       await _storage.delete(key: keyIsLoggedIn);
     } catch (_) {}
