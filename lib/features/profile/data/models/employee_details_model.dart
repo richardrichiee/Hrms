@@ -1,24 +1,49 @@
 class LeaveBalanceItem {
   final int leaveId;
   final String leaveName;
+  final double opening;
+  final double taken;
   final double closing;
 
   LeaveBalanceItem({
     required this.leaveId,
     required this.leaveName,
+    this.opening = 0.0,
+    this.taken = 0.0,
     required this.closing,
   });
 
   factory LeaveBalanceItem.fromJson(Map<String, dynamic> json) {
+    final closingVal = (json['Closing'] as num?)?.toDouble() ??
+        (json['Balance'] as num?)?.toDouble() ??
+        (json['BalanceLeaves'] as num?)?.toDouble() ??
+        0.0;
+    final takenVal = (json['Taken'] as num?)?.toDouble() ??
+        (json['LeaveTaken'] as num?)?.toDouble() ??
+        (json['Availed'] as num?)?.toDouble() ??
+        0.0;
+    final openingVal = (json['Opening'] as num?)?.toDouble() ??
+        (json['Total'] as num?)?.toDouble() ??
+        (json['TotalLeaves'] as num?)?.toDouble() ??
+        (closingVal + takenVal);
+
     return LeaveBalanceItem(
-      leaveId: json['LeaveID'] ?? 0,
+      leaveId: json['LeaveID'] ?? json['LeaveId'] ?? 0,
       leaveName: json['LeaveName']?.toString() ?? 'Leave',
-      closing: (json['Closing'] as num?)?.toDouble() ?? 0.0,
+      opening: openingVal,
+      taken: takenVal,
+      closing: closingVal,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'LeaveID': leaveId, 'LeaveName': leaveName, 'Closing': closing};
+    return {
+      'LeaveID': leaveId,
+      'LeaveName': leaveName,
+      'Opening': opening,
+      'Taken': taken,
+      'Closing': closing,
+    };
   }
 }
 

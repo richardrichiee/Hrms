@@ -63,6 +63,13 @@ class _SplashPageState extends State<SplashPage>
       final user = await LocalStorageService.getUser();
 
       if (isLoggedIn || user != null) {
+        if (user != null &&
+            (user.employeeId <= 0 ||
+                user.empCode == '0' ||
+                user.empCode == '0.0')) {
+          await LocalStorageService.clearUserSession();
+          return '/login';
+        }
         return '/dashboard';
       }
 

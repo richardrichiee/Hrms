@@ -43,32 +43,10 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
   }
 
   List<LeaveSummaryItem> get _data {
-    if (widget.items != null && widget.items!.isNotEmpty) {
+    if (widget.items != null) {
       return widget.items!;
     }
-    return [
-      LeaveSummaryItem(
-        leaveName: 'Privilege',
-        totalLeaves: 10,
-        employeesTaken: 2.5,
-        balanceLeaves: 7.5,
-        color: const Color(0xFF2563EB),
-      ),
-      LeaveSummaryItem(
-        leaveName: 'Casual',
-        totalLeaves: 6,
-        employeesTaken: 2.0,
-        balanceLeaves: 4.0,
-        color: const Color(0xFF006C49),
-      ),
-      LeaveSummaryItem(
-        leaveName: 'Sick',
-        totalLeaves: 5,
-        employeesTaken: 2.0,
-        balanceLeaves: 3.0,
-        color: const Color(0xFF3E3FCC),
-      ),
-    ];
+    return [];
   }
 
   @override
@@ -359,6 +337,21 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
   }
 
   Widget _buildTableView(List<LeaveSummaryItem> data) {
+    if (data.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        alignment: Alignment.center,
+        child: const Text(
+          'No leave balances recorded',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textMuted,
+          ),
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),

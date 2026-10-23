@@ -74,7 +74,7 @@ class _ApplyLeavePageState extends State<ApplyLeavePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Select Leave Category',
+                'Select Leave',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -83,7 +83,7 @@ class _ApplyLeavePageState extends State<ApplyLeavePage> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Choose a category to apply for leave',
+                'Choose a leave type to apply',
                 style: TextStyle(fontSize: 13, color: AppColors.textMuted),
               ),
               const SizedBox(height: 20),

@@ -121,6 +121,16 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     if (result.isSuccess && result.user != null) {
+      if (result.user!.employeeId <= 0 ||
+          result.user!.empCode == '0' ||
+          result.user!.empCode == '0.0') {
+        await LocalStorageService.clearUserSession();
+        setState(() {
+          _errorMessage = 'User not Active';
+        });
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,

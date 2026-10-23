@@ -14,7 +14,7 @@ class ApplyClaimDialog extends StatefulWidget {
 class _ApplyClaimDialogState extends State<ApplyClaimDialog> {
   final _claimService = ClaimService();
   final _remarksController = TextEditingController();
-  final _rateController = TextEditingController(text: '100');
+  final _rateController = TextEditingController();
   final _qtyController = TextEditingController(text: '1');
   final _reasonController = TextEditingController();
 
@@ -124,6 +124,9 @@ class _ApplyClaimDialogState extends State<ApplyClaimDialog> {
       // Reset item inputs
       _reasonController.clear();
       _qtyController.text = '1';
+      if (!_isRateStatic) {
+        _rateController.clear();
+      }
     });
   }
 
@@ -315,7 +318,6 @@ class _ApplyClaimDialogState extends State<ApplyClaimDialog> {
                     TextField(
                       controller: _remarksController,
                       decoration: const InputDecoration(
-                        hintText: 'e.g. Client visit and travel expenses',
                         contentPadding:
                             EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       ),
@@ -488,7 +490,6 @@ class _ApplyClaimDialogState extends State<ApplyClaimDialog> {
                             controller: _reasonController,
                             decoration: const InputDecoration(
                               labelText: 'Item Description / Reason',
-                              hintText: 'e.g. Taxi fare to client office',
                               contentPadding: EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                             ),

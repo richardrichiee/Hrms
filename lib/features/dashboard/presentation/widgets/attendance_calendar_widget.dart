@@ -160,60 +160,17 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Calendar Header with Chevrons and Legend
+          // 1. Calendar Header with Month Name and Legend
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Text(
-                    monthName,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () {
-                      final prev = DateTime(
-                        focusedMonth.year,
-                        focusedMonth.month - 1,
-                        1,
-                      );
-                      widget.onDateSelected?.call(prev);
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.all(4.0),
-                      child: Icon(
-                        Icons.chevron_left_rounded,
-                        size: 18,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () {
-                      final next = DateTime(
-                        focusedMonth.year,
-                        focusedMonth.month + 1,
-                        1,
-                      );
-                      widget.onDateSelected?.call(next);
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.all(4.0),
-                      child: Icon(
-                        Icons.chevron_right_rounded,
-                        size: 18,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ),
-                ],
+              Text(
+                monthName,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
               Row(
                 children: [

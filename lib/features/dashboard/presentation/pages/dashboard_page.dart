@@ -23,7 +23,6 @@ import '../widgets/attendance_calendar_widget.dart';
 import '../widgets/dashboard_metrics.dart';
 import '../widgets/leave_balance_chart.dart';
 import '../widgets/today_punch_history_sheet.dart';
-import '../../../settings/presentation/widgets/branch_location_sheet.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -154,31 +153,29 @@ class _DashboardPageState extends State<DashboardPage> {
           : <LastAttendanceModel>[];
 
       final summaryItems = <LeaveSummaryItem>[];
-      final defaultColors = [
-        const Color(0xFFB06A44),
-        const Color(0xFF5B9E94),
-        const Color(0xFF1E88E5),
-        const Color(0xFFE53935),
-        const Color(0xFFFB8C00),
-        const Color(0xFF8E24AA),
+      final distinctColors = [
+        const Color(0xFFB06A44), // Warm Bronze
+        const Color(0xFF5B9E94), // Sage Teal
+        const Color(0xFF1E88E5), // Blue
+        const Color(0xFFD97706), // Amber
+        const Color(0xFF7C3AED), // Purple
+        const Color(0xFFE11D48), // Rose
+        const Color(0xFF059669), // Emerald
+        const Color(0xFFEA580C), // Orange
       ];
       int colorIdx = 0;
 
       if (employeeDetails != null && employeeDetails.leaveBalances.isNotEmpty) {
         for (final bal in employeeDetails.leaveBalances) {
           final name = bal.leaveName;
-          final color = name.toLowerCase().contains('casual')
-              ? const Color(0xFFB06A44)
-              : name.toLowerCase().contains('sick')
-              ? const Color(0xFF5B9E94)
-              : defaultColors[colorIdx % defaultColors.length];
+          final color = distinctColors[colorIdx % distinctColors.length];
           colorIdx++;
 
           summaryItems.add(
             LeaveSummaryItem(
               leaveName: name,
-              totalLeaves: bal.closing,
-              employeesTaken: 0,
+              totalLeaves: bal.opening > 0 ? bal.opening : bal.closing,
+              employeesTaken: bal.taken,
               balanceLeaves: bal.closing,
               color: color,
             ),
@@ -191,12 +188,7 @@ class _DashboardPageState extends State<DashboardPage> {
               (item['EmployeesTakenLeave'] as num?)?.toDouble() ?? 0.0;
           final taken = (item['TotalLeaveDays'] as num?)?.toDouble() ?? 0.0;
           final balance = (total - taken) >= 0 ? (total - taken) : 0.0;
-
-          final color = name.toLowerCase().contains('casual')
-              ? const Color(0xFFB06A44)
-              : name.toLowerCase().contains('sick')
-              ? const Color(0xFF5B9E94)
-              : defaultColors[colorIdx % defaultColors.length];
+          final color = distinctColors[colorIdx % distinctColors.length];
           colorIdx++;
 
           summaryItems.add(
@@ -598,12 +590,9 @@ class _DashboardPageState extends State<DashboardPage> {
       debugPrint('❌ [CheckIn Error] Branch location is NOT configured!');
       _showLocationDialog(
         title: 'Location Not Configured',
-        message:
-            'Branch GPS coordinates (Latitude & Longitude) are not configured for ${branch?.name ?? "this branch"}.\n\nPlease configure the office coordinates to enable attendance punch.',
+        message: 'Branch location coordinates are not configured.',
         icon: Icons.location_off_rounded,
         iconColor: AppColors.error,
-        onAction: () => _openBranchLocationSheet(),
-        actionLabel: 'Configure Location',
       );
       return;
     }
@@ -748,12 +737,9 @@ class _DashboardPageState extends State<DashboardPage> {
         if (!mounted) return;
         _showLocationDialog(
           title: 'Outside Branch Area',
-          message:
-              'You are outside the branch area for ${branch.name}. (${distance.toStringAsFixed(0)}m away, allowed radius is ${branch.radius?.toStringAsFixed(0) ?? "100"}m).\n\nWould you like to adjust or update the branch coordinates?',
+          message: 'You are outside the branch area.',
           icon: Icons.wrong_location_rounded,
           iconColor: AppColors.error,
-          onAction: () => _openBranchLocationSheet(),
-          actionLabel: 'Update Coordinates',
         );
         return;
       }
@@ -902,22 +888,6 @@ class _DashboardPageState extends State<DashboardPage> {
       if (mounted) {
         setState(() => _isLocationChecking = false);
       }
-    }
-  }
-
-  Future<void> _openBranchLocationSheet() async {
-    await BranchLocationSheet.show(context, branch: _selectedBranch);
-    final branches = await LocalStorageService.getBranches();
-    if (mounted && branches.isNotEmpty) {
-      setState(() {
-        _branches = branches;
-        if (_selectedBranch != null) {
-          _selectedBranch = _branches.firstWhere(
-            (b) => b.value == _selectedBranch!.value,
-            orElse: () => _selectedBranch!,
-          );
-        }
-      });
     }
   }
 
@@ -1113,29 +1083,6 @@ class _DashboardPageState extends State<DashboardPage> {
                           },
                         );
                       }),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      width: double.infinity,
-                      child: TextButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _openBranchLocationSheet();
-                        },
-                        icon: const Icon(
-                          Icons.edit_location_alt_rounded,
-                          size: 16,
-                          color: Color(0xFF7C3AED),
-                        ),
-                        label: const Text(
-                          'Configure Branch Coordinates',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF7C3AED),
-                          ),
-                        ),
-                      ),
-                    ),
 
                     const Divider(height: 24),
 
@@ -1521,21 +1468,6 @@ class _DashboardPageState extends State<DashboardPage> {
                     vertical: 12,
                   ),
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      child: Text(
-                        'MAIN WORKSPACE',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF94A3B8),
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ),
                     _buildDrawerTile(
                       icon: Icons.grid_view_rounded,
                       title: 'Home Dashboard',

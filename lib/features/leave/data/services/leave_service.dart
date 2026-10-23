@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/network/app_urls.dart';
 import '../../../../core/storage/local_storage_service.dart';
@@ -47,6 +49,10 @@ class LeaveService {
         accessPoint: accessPoint,
       );
 
+      debugPrint('==================== [LeaveService] FETCH LEAVE APPLICATIONS ====================');
+      debugPrint('[LeaveService] AccessPoint: $accessPoint | UserID: $userId | EmpID: ${user?.employeeId} | UserName: ${user?.userName}');
+      debugPrint('[LeaveService] Endpoint: $url');
+
       final response = await _dio.get(
         url,
         options: Options(
@@ -54,18 +60,32 @@ class LeaveService {
         ),
       );
 
+      debugPrint('📥 [LeaveService] Fetch Leaves Status: ${response.statusCode}');
+      debugPrint('📥 [LeaveService] Fetch Leaves Body: ${response.data}');
+
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
         if (data['value'] != null && data['value'] is List) {
           final list = data['value'] as List;
-          return list
-              .map((item) => LeaveApplicationModel.fromJson(item as Map<String, dynamic>))
-              .toList();
+          final apps = <LeaveApplicationModel>[];
+          for (final item in list) {
+            try {
+              if (item is Map) {
+                apps.add(LeaveApplicationModel.fromJson(Map<String, dynamic>.from(item)));
+              }
+            } catch (err) {
+              debugPrint('⚠️ [LeaveService] Error parsing leave item $item: $err');
+            }
+          }
+          debugPrint('✅ [LeaveService] Successfully parsed ${apps.length} leave applications');
+          return apps;
         }
       }
 
       return [];
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('❌ [LeaveService] Exception in fetchLeaveApplications: $e');
+      debugPrint('Stack: $stack');
       return [];
     }
   }
@@ -101,7 +121,7 @@ class LeaveService {
   }
 
   /// POST /api/HRM/LeaveApplication/v1/Calculation/{timeStamp}/{accessPoint}
-  Future<double> calculateLeaveDays({
+  Future<LeaveCalculationResult> calculateLeaveDaysWithValidation({
     required String leaveId,
     required String leaveType,
     required String fromDate,
@@ -110,23 +130,35 @@ class LeaveService {
     try {
       final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
       final user = await LocalStorageService.getUser();
-      final empId = user?.employeeId.toString() ?? '1';
+      final empId = (user?.employeeId != null && user!.employeeId > 0)
+          ? user.employeeId.toString()
+          : (user?.userId != null && user!.userId > 0 ? user.userId.toString() : '26');
+
+      final savedBranchId = await LocalStorageService.getSelectedBranchId();
+      final branchId = (savedBranchId != null && savedBranchId > 0)
+          ? savedBranchId.toString()
+          : "1";
 
       final url = AppUrls.getLeaveApplicationCalculationUrl(accessPoint: accessPoint);
 
       final payload = {
         "Head": {
-          "BranchID": null,
+          "BranchID": branchId,
           "LeaveID": leaveId,
           "EmpID": empId,
           "LeaveType": leaveType,
-          "FromDate": fromDate,
-          "ToDate": toDate,
+          "FromDate": _formatToIsoDate(fromDate),
+          "ToDate": _formatToIsoDate(toDate),
           "NoOfLeaves": null,
           "ApprovalStatus": null,
           "Reason": null
         }
       };
+
+      debugPrint('==================== [LeaveService] CALCULATION ====================');
+      debugPrint('[LeaveService] AccessPoint: $accessPoint | EmpID: $empId | BranchID: $branchId');
+      debugPrint('[LeaveService] Endpoint: $url');
+      debugPrint('[LeaveService] Payload: ${jsonEncode(payload)}');
 
       final response = await _dio.post(
         url,
@@ -139,14 +171,57 @@ class LeaveService {
         ),
       );
 
+      debugPrint('📥 [LeaveService] Calculation Response Status: ${response.statusCode}');
+      debugPrint('📥 [LeaveService] Calculation Response Body: ${response.data}');
+
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
-        if (data['value'] != null) {
-          final val = data['value'];
-          if (val is Map && val['NoOfLeaves'] != null) {
-            return double.tryParse(val['NoOfLeaves'].toString()) ?? 1.0;
-          } else if (val is num) {
-            return val.toDouble();
+        if (data is Map) {
+          if (data['value'] != null) {
+            final val = data['value'];
+            if (val is List && val.isNotEmpty) {
+              final first = val.first;
+              if (first is Map) {
+                final errorMsg = first['ERRORMESSAGE']?.toString() ??
+                    first['ErrorMessage']?.toString() ??
+                    first['errormessage']?.toString() ??
+                    '';
+                final noOfLeaves = double.tryParse(first['NoOfLeaves']?.toString() ?? '') ?? 0.0;
+                if (errorMsg.trim().isNotEmpty) {
+                  debugPrint('⚠️ [LeaveService] Calculation validation error: $errorMsg');
+                  return LeaveCalculationResult(
+                    days: noOfLeaves,
+                    errorMessage: errorMsg.trim(),
+                  );
+                }
+                return LeaveCalculationResult(days: noOfLeaves);
+              }
+            } else if (val is Map) {
+              final errorMsg = val['ERRORMESSAGE']?.toString() ??
+                  val['ErrorMessage']?.toString() ??
+                  val['errormessage']?.toString() ??
+                  '';
+              final noOfLeaves = double.tryParse(val['NoOfLeaves']?.toString() ?? '') ?? 1.0;
+              if (errorMsg.trim().isNotEmpty) {
+                return LeaveCalculationResult(
+                  days: noOfLeaves,
+                  errorMessage: errorMsg.trim(),
+                );
+              }
+              return LeaveCalculationResult(days: noOfLeaves);
+            } else if (val is num) {
+              return LeaveCalculationResult(days: val.toDouble());
+            }
+          }
+
+          if (data['error'] != null) {
+            final errStr = _extractCleanErrorMessage(data['error']);
+            if (errStr.isNotEmpty) {
+              return LeaveCalculationResult(
+                days: 0.0,
+                errorMessage: errStr,
+              );
+            }
           }
         }
       }
@@ -154,17 +229,52 @@ class LeaveService {
       final start = DateTime.tryParse(fromDate) ?? DateTime.now();
       final end = DateTime.tryParse(toDate) ?? DateTime.now();
       final diff = end.difference(start).inDays + 1;
-      return leaveType == '1' ? diff.toDouble() : 0.5;
+      return LeaveCalculationResult(days: leaveType == '1' ? diff.toDouble() : 0.5);
     } catch (e) {
+      debugPrint('⚠️ [LeaveService] Calculation error: $e');
+      if (e is DioException && e.response?.data != null) {
+        final data = e.response!.data;
+        if (data is Map) {
+          if (data['value'] != null && data['value'] is List && (data['value'] as List).isNotEmpty) {
+            final first = (data['value'] as List).first;
+            if (first is Map) {
+              final em = first['ERRORMESSAGE']?.toString() ?? first['ErrorMessage']?.toString();
+              if (em != null && em.trim().isNotEmpty) {
+                return LeaveCalculationResult(days: 0.0, errorMessage: em.trim());
+              }
+            }
+          }
+          final cleanErr = _extractCleanErrorMessage(data);
+          if (cleanErr.isNotEmpty) {
+            return LeaveCalculationResult(days: 0.0, errorMessage: cleanErr);
+          }
+        }
+      }
       final start = DateTime.tryParse(fromDate) ?? DateTime.now();
       final end = DateTime.tryParse(toDate) ?? DateTime.now();
       final diff = end.difference(start).inDays + 1;
-      return leaveType == '1' ? diff.toDouble() : 0.5;
+      return LeaveCalculationResult(days: leaveType == '1' ? diff.toDouble() : 0.5);
     }
   }
 
+  /// Backward-compatible wrapper
+  Future<double> calculateLeaveDays({
+    required String leaveId,
+    required String leaveType,
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final res = await calculateLeaveDaysWithValidation(
+      leaveId: leaveId,
+      leaveType: leaveType,
+      fromDate: fromDate,
+      toDate: toDate,
+    );
+    return res.days;
+  }
+
   /// POST /api/HRM/LeaveApplication/v1/Save/{id}/{userId}/{timeStamp}/{accessPoint}
-  Future<bool> saveLeaveApplication({
+  Future<LeaveSaveResult> saveLeaveApplicationWithResult({
     required String leaveId,
     required String leaveType,
     required String fromDate,
@@ -180,6 +290,11 @@ class LeaveService {
       final empId = (user?.employeeId != null && user!.employeeId > 0)
           ? user.employeeId.toString()
           : (user?.userId != null && user!.userId > 0 ? user.userId.toString() : '26');
+
+      final savedBranchId = await LocalStorageService.getSelectedBranchId();
+      final branchId = (savedBranchId != null && savedBranchId > 0)
+          ? savedBranchId.toString()
+          : "1";
 
       // Check transaction hierarchy from UserRights (MenuCode 19):
       // 1 = No hierarchy, 2 = Forward, 3 = Approve/Reject
@@ -202,7 +317,7 @@ class LeaveService {
 
       final payload = {
         "Head": {
-          "BranchID": "1",
+          "BranchID": branchId,
           "LeaveID": leaveId,
           "EmpID": empId,
           "LeaveType": leaveType,
@@ -215,6 +330,11 @@ class LeaveService {
         }
       };
 
+      debugPrint('==================== [LeaveService] SAVE LEAVE APPLICATION ====================');
+      debugPrint('[LeaveService] AccessPoint: $accessPoint | UserID: $userId | EmpID: $empId | BranchID: $branchId');
+      debugPrint('[LeaveService] Endpoint: $url');
+      debugPrint('[LeaveService] Payload: ${jsonEncode(payload)}');
+
       final response = await _dio.post(
         url,
         data: payload,
@@ -226,34 +346,204 @@ class LeaveService {
         ),
       );
 
-      if (response.statusCode == 200) {
-        if (finalApprovalStatus == 'A') {
-          // If response provides the created record Key/ID, also trigger approveOrForwardLeave
-          // to guarantee both database tables and workflow state mark it as Approved
-          try {
-            int? createdKey;
-            if (response.data != null && response.data is Map) {
-              final val = response.data['value'];
-              if (val is int) {
-                createdKey = val;
-              } else if (val is Map && val['Key'] != null) {
-                createdKey = int.tryParse(val['Key'].toString());
-              } else if (val is List && val.isNotEmpty && val.first is Map) {
-                createdKey = int.tryParse(
-                    val.first['Key']?.toString() ?? val.first['ID']?.toString() ?? '');
-              }
+      debugPrint('📥 [LeaveService] Response Status: ${response.statusCode}');
+      debugPrint('📥 [LeaveService] Response Body: ${response.data}');
+
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data;
+        int? createdKey;
+        String backendError = '';
+
+        if (data is Map) {
+          final val = data['value'];
+          if (val is int) {
+            if (val > 0) {
+              createdKey = val;
+            } else {
+              backendError = 'Leave application could not be saved (Code: $val)';
             }
-            if (createdKey != null && createdKey > 0) {
-              await approveOrForwardLeave(key: createdKey, approvalStatus: 'A');
+          } else if (val is List && val.isNotEmpty && val.first is Map) {
+            final first = val.first as Map;
+            createdKey = int.tryParse(first['Key']?.toString() ?? first['ID']?.toString() ?? '');
+            final errCol = first['ERRORMESSAGE']?.toString() ??
+                first['ErrorMessage']?.toString() ??
+                first['errormessage']?.toString() ??
+                first['error']?.toString() ??
+                '';
+            if (errCol.trim().isNotEmpty) {
+              backendError = errCol.trim();
+            } else if (createdKey != null && createdKey <= 0) {
+              backendError = first['Message']?.toString() ?? first['message']?.toString() ?? 'Leave application could not be saved';
             }
-          } catch (_) {}
+          } else if (val is Map) {
+            createdKey = int.tryParse(val['Key']?.toString() ?? val['ID']?.toString() ?? '');
+          }
+
+          // 1. If SQL Server returned an explicit validation error column, it is a genuine error:
+          if (backendError.isNotEmpty) {
+            debugPrint('⚠️ [LeaveService] Backend validation error: $backendError');
+            return LeaveSaveResult(
+              success: false,
+              errorMessage: backendError,
+              statusCode: response.statusCode,
+              data: data,
+            );
+          }
+
+          // 2. If a valid positive Key was generated, IT IS A SUCCESS!
+          if (createdKey != null && createdKey > 0) {
+            debugPrint('✅ [LeaveService] Leave record successfully inserted into database with Key: $createdKey');
+
+            if (finalApprovalStatus == 'A') {
+              try {
+                await approveOrForwardLeave(key: createdKey, approvalStatus: 'A');
+              } catch (_) {}
+            }
+
+            return LeaveSaveResult(
+              success: true,
+              statusCode: response.statusCode,
+              data: data,
+            );
+          }
+
+          // 3. Only check 'error' if it's a non-empty error object (ignoring empty map {})
+          if (data['error'] != null) {
+            final errStr = _extractCleanErrorMessage(data['error']);
+            if (errStr.isNotEmpty) {
+              debugPrint('⚠️ [LeaveService] Backend error map: $errStr');
+              return LeaveSaveResult(
+                success: false,
+                errorMessage: errStr,
+                statusCode: response.statusCode,
+                data: data,
+              );
+            }
+          }
+
+          final hasErrorFlag = data['IsSuccess'] == false ||
+              data['Status'] == false ||
+              data['status'] == false ||
+              data['StatusCode'] == 0 ||
+              data['statusCode'] == 0 ||
+              data['StatusCode'] == -1 ||
+              data['statusCode'] == -1;
+
+          if (hasErrorFlag) {
+            final errStr = _extractCleanErrorMessage(data);
+            debugPrint('⚠️ [LeaveService] Backend error flag: $errStr');
+            return LeaveSaveResult(
+              success: false,
+              errorMessage: errStr.isNotEmpty ? errStr : 'Leave application rejected by server validation.',
+              statusCode: response.statusCode,
+              data: data,
+            );
+          }
         }
-        return true;
+
+        // Default to success for HTTP 200 with no errors
+        return LeaveSaveResult(
+          success: true,
+          statusCode: response.statusCode,
+          data: data,
+        );
       }
-      return false;
-    } catch (e) {
-      return false;
+
+      final cleanMsg = _extractCleanErrorMessage(response.data);
+      return LeaveSaveResult(
+        success: false,
+        errorMessage: cleanMsg.isNotEmpty ? cleanMsg : 'Server returned HTTP ${response.statusCode}',
+        statusCode: response.statusCode,
+        data: response.data,
+      );
+    } on DioException catch (dioErr) {
+      debugPrint('❌❌❌ [LeaveService DIO EXCEPTION]:');
+      debugPrint('[LeaveService] Message: ${dioErr.message}');
+      debugPrint('[LeaveService] Type: ${dioErr.type}');
+      debugPrint('[LeaveService] Endpoint: ${dioErr.requestOptions.uri}');
+      debugPrint('[LeaveService] Request Payload: ${dioErr.requestOptions.data}');
+      debugPrint('[LeaveService] Response Status: ${dioErr.response?.statusCode}');
+      debugPrint('[LeaveService] Response Body: ${dioErr.response?.data}');
+
+      final cleanMsg = _extractCleanErrorMessage(dioErr.response?.data ?? dioErr.message);
+      return LeaveSaveResult(
+        success: false,
+        errorMessage: cleanMsg,
+        statusCode: dioErr.response?.statusCode,
+        data: dioErr.response?.data,
+      );
+    } catch (e, stack) {
+      debugPrint('❌❌❌ [LeaveService UNEXPECTED EXCEPTION]: $e');
+      debugPrint('[LeaveService] Stack: $stack');
+      return LeaveSaveResult(
+        success: false,
+        errorMessage: _extractCleanErrorMessage(e),
+      );
     }
+  }
+
+  /// Backward-compatible wrapper
+  Future<bool> saveLeaveApplication({
+    required String leaveId,
+    required String leaveType,
+    required String fromDate,
+    required String toDate,
+    required String noOfLeaves,
+    required String reason,
+    String? approvalStatus,
+  }) async {
+    final res = await saveLeaveApplicationWithResult(
+      leaveId: leaveId,
+      leaveType: leaveType,
+      fromDate: fromDate,
+      toDate: toDate,
+      noOfLeaves: noOfLeaves,
+      reason: reason,
+      approvalStatus: approvalStatus,
+    );
+    return res.success;
+  }
+
+  static String _extractCleanErrorMessage(dynamic raw) {
+    if (raw == null) return '';
+    if (raw is Map) {
+      if (raw.isEmpty) return '';
+      if (raw['error'] != null) {
+        if (raw['error'] is Map) {
+          final m = raw['error']['Message']?.toString() ?? raw['error']['message']?.toString();
+          if (m != null && m.trim().isNotEmpty) return m.trim();
+        } else if (raw['error'].toString().trim().isNotEmpty && raw['error'].toString() != '{}') {
+          return raw['error'].toString().trim();
+        }
+      }
+      if (raw['ERRORMESSAGE'] != null && raw['ERRORMESSAGE'].toString().trim().isNotEmpty) {
+        return raw['ERRORMESSAGE'].toString().trim();
+      }
+      if (raw['ErrorMessage'] != null && raw['ErrorMessage'].toString().trim().isNotEmpty) {
+        return raw['ErrorMessage'].toString().trim();
+      }
+      if (raw['Message'] != null && raw['Message'].toString().trim().isNotEmpty) {
+        return raw['Message'].toString().trim();
+      }
+      if (raw['message'] != null && raw['message'].toString().trim().isNotEmpty) {
+        return raw['message'].toString().trim();
+      }
+      if (raw['value'] != null && raw['value'] is List && (raw['value'] as List).isNotEmpty) {
+        final first = (raw['value'] as List).first;
+        if (first is Map) {
+          final em = first['ERRORMESSAGE']?.toString() ?? first['ErrorMessage']?.toString();
+          if (em != null && em.trim().isNotEmpty) return em.trim();
+        }
+      }
+      return '';
+    }
+    final s = raw.toString().trim();
+    if (s.isEmpty || s == '{}' || s == '[]') return '';
+    final match = RegExp(r'Message:\s*([^,\n}]+)').firstMatch(s);
+    if (match != null && match.group(1) != null) {
+      return match.group(1)!.trim();
+    }
+    return s.length > 120 ? '${s.substring(0, 117)}...' : s;
   }
 
   /// POST /api/HRM/LeaveApplication/v1/Save/{key}/{userId}/{timeStamp}/{accessPoint}
@@ -632,4 +922,28 @@ class LeaveService {
       return false;
     }
   }
+}
+
+class LeaveSaveResult {
+  final bool success;
+  final String? errorMessage;
+  final int? statusCode;
+  final dynamic data;
+
+  const LeaveSaveResult({
+    required this.success,
+    this.errorMessage,
+    this.statusCode,
+    this.data,
+  });
+}
+
+class LeaveCalculationResult {
+  final double days;
+  final String? errorMessage;
+
+  const LeaveCalculationResult({
+    required this.days,
+    this.errorMessage,
+  });
 }

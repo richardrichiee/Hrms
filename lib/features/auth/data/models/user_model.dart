@@ -3,6 +3,7 @@ class UserModel {
   final int userId;
   final String userName;
   final int employeeId;
+  final String empCode;
   final String serverDate;
   final int roleId;
   final String? errorMessage;
@@ -12,6 +13,7 @@ class UserModel {
     required this.userId,
     required this.userName,
     required this.employeeId,
+    this.empCode = '',
     required this.serverDate,
     required this.roleId,
     this.errorMessage,
@@ -35,6 +37,14 @@ class UserModel {
               json['EmpId']?.toString() ??
               '0') ??
           0,
+      empCode: json['EmpCode']?.toString() ??
+          json['EmployeeCode']?.toString() ??
+          json['Empcode']?.toString() ??
+          json['EmpNo']?.toString() ??
+          json['EmployeeNo']?.toString() ??
+          json['empCode']?.toString() ??
+          json['emp_code']?.toString() ??
+          '',
       serverDate: json['ServerDate']?.toString() ?? '',
       roleId: int.tryParse(json['RoleID']?.toString() ??
               json['RoleId']?.toString() ??
@@ -50,6 +60,7 @@ class UserModel {
       'UserID': userId,
       'UserName': userName,
       'EmployeeID': employeeId,
+      'EmpCode': empCode,
       'ServerDate': serverDate,
       'RoleID': roleId,
       'ErrorMessage': errorMessage,

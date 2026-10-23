@@ -7,12 +7,14 @@ class ClaimApprovalDetailsPage extends StatefulWidget {
   final int claimId;
   final Map<String, dynamic> itemData;
   final UserRightsModel? userRights;
+  final bool isApprover;
 
   const ClaimApprovalDetailsPage({
     super.key,
     required this.claimId,
     required this.itemData,
     this.userRights,
+    this.isApprover = true,
   });
 
   @override
@@ -160,6 +162,73 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
     }
   }
 
+  Future<void> _handleDelete() async {
+    final claimNo = _getClaimNumber();
+    final amountText = _getFormattedAmount();
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete Claim',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to delete claim #$claimNo ($amountText)? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    final success = await _claimService.deleteClaim(widget.claimId);
+
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+      });
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Claim application deleted successfully!'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        Navigator.pop(context, true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete claim. Please try again.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
   String _getFormattedAmount() {
     if (_headData != null && _headData!['Amount'] != null) {
       final amt = double.tryParse(_headData!['Amount'].toString()) ?? 0.0;
@@ -212,6 +281,11 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
     return 'None specified';
   }
 
+  String _formatApplicantName(String raw) {
+    if (raw.isEmpty) return 'Applicant';
+    return raw.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}').trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     final statusStr = (_headData?['Status']?.toString() ??
@@ -227,9 +301,17 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
         statusStr.toLowerCase() == 'forward';
     final isPending = !isApproved && !isRejected && !isForwarded;
 
-    final applicant = widget.itemData['applicant']?.toString() ?? 'Applicant';
+    final rawApplicant = _headData?['Employee']?.toString() ??
+        _headData?['EmployeeName']?.toString() ??
+        _headData?['EmpName']?.toString() ??
+        widget.itemData['applicant']?.toString() ??
+        'Applicant';
+    final applicant = _formatApplicantName(rawApplicant);
     final avatarLetter = applicant.isNotEmpty ? applicant[0].toUpperCase() : 'A';
-    final branchName = widget.itemData['branch']?.toString() ?? 'Head Office';
+    final branchName = _headData?['Branch']?.toString() ??
+        _headData?['BranchName']?.toString() ??
+        widget.itemData['branch']?.toString() ??
+        'Head Office';
     final claimNo = _getClaimNumber();
 
     return Scaffold(
@@ -242,9 +324,9 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Claim Approval Details',
-              style: TextStyle(
+            Text(
+              widget.isApprover ? 'Claim Approval Details' : 'Claim Details',
+              style: const TextStyle(
                 fontSize: 16.5,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -320,7 +402,7 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
                   left: 16,
                   right: 16,
                   top: 16,
-                  bottom: isPending ? 100 : 32,
+                  bottom: isPending ? 120 : 40,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,42 +432,60 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.receipt_long_rounded,
-                                      size: 14,
-                                      color: Colors.white,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Expense Reimbursement',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
+                              Flexible(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.receipt_long_rounded,
+                                        size: 14,
                                         color: Colors.white,
                                       ),
-                                    ),
-                                  ],
+                                      SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          'Expense Reimbursement',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              Text(
-                                'Claim Date: ${_getClaimDate()}',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: Colors.white.withValues(alpha: 0.85),
-                                  fontWeight: FontWeight.w500,
-                                ),
+                              const SizedBox(width: 8),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.calendar_today_rounded,
+                                    size: 12,
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _getClaimDate(),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -505,14 +605,6 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
                             label: 'Submission Date',
                             value: _getClaimDate(),
                           ),
-                          if (_headData?['FinYearID'] != null) ...[
-                            const SizedBox(height: 8),
-                            _DetailRowItem(
-                              icon: Icons.date_range_outlined,
-                              label: 'Financial Year ID',
-                              value: _headData!['FinYearID'].toString(),
-                            ),
-                          ],
                         ],
                       ),
                     ),
@@ -679,25 +771,31 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
                                         ),
                                       ],
                                       const SizedBox(height: 6),
-                                      Row(
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        crossAxisAlignment: WrapCrossAlignment.center,
                                         children: [
-                                          if (dateStr.isNotEmpty) ...[
-                                            const Icon(
-                                              Icons.access_time_rounded,
-                                              size: 12,
-                                              color: AppColors.textMuted,
+                                          if (dateStr.isNotEmpty)
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.access_time_rounded,
+                                                  size: 12,
+                                                  color: AppColors.textMuted,
+                                                ),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  dateStr,
+                                                  style: const TextStyle(
+                                                    fontSize: 11.5,
+                                                    color: AppColors.textMuted,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                            const SizedBox(width: 3),
-                                            Text(
-                                              dateStr,
-                                              style: const TextStyle(
-                                                fontSize: 11.5,
-                                                color: AppColors.textMuted,
-                                              ),
-                                            ),
-                                          ],
-                                          if (qty > 0 && rate > 0) ...[
-                                            const SizedBox(width: 10),
+                                          if (qty > 0 && rate > 0)
                                             Text(
                                               'Qty: ${qty % 1 == 0 ? qty.toInt() : qty} × ₹${rate.toStringAsFixed(2)}',
                                               style: const TextStyle(
@@ -705,7 +803,6 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
                                                 color: AppColors.textMuted,
                                               ),
                                             ),
-                                          ],
                                         ],
                                       ),
                                     ],
@@ -767,7 +864,7 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
                 ),
               ),
             ),
-      bottomNavigationBar: isPending
+      bottomNavigationBar: (isPending && (widget.isApprover || (widget.userRights?.delRight ?? true)))
           ? SafeArea(
               child: Container(
                 padding: const EdgeInsets.all(16),
@@ -788,12 +885,104 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
                           child: CircularProgressIndicator(strokeWidth: 2.5),
                         ),
                       )
-                    : Row(
-                        children: [
-                          // Reject Button
-                          Expanded(
+                    : (widget.isApprover
+                        ? Row(
+                            children: [
+                              // Reject Button
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _handleAction('R'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.error,
+                                    side: const BorderSide(color: Color(0xFFFCA5A5)),
+                                    backgroundColor: const Color(0xFFFEF2F2),
+                                    padding: const EdgeInsets.symmetric(vertical: 13),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.close_rounded, size: 18),
+                                  label: const FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      'Reject',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+
+                              // Forward button (if transactions == 2)
+                              if (widget.userRights?.transactions == 2) ...[
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _handleAction('F'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: AppColors.primary,
+                                      side: const BorderSide(
+                                        color: Color(0xFF93C5FD),
+                                      ),
+                                      backgroundColor: const Color(0xFFEFF6FF),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 13,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.forward_rounded, size: 18),
+                                    label: const FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        'Forward',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                              ],
+
+                              // Approve Button
+                              Expanded(
+                                flex: 1,
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _handleAction('A'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF059669),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(vertical: 13),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.check_rounded, size: 18),
+                                  label: const FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      'Approve',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : SizedBox(
+                            width: double.infinity,
                             child: OutlinedButton.icon(
-                              onPressed: () => _handleAction('R'),
+                              onPressed: _handleDelete,
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.error,
                                 side: const BorderSide(color: Color(0xFFFCA5A5)),
@@ -803,75 +992,16 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              icon: const Icon(Icons.close_rounded, size: 18),
+                              icon: const Icon(Icons.delete_outline_rounded, size: 18),
                               label: const Text(
-                                'Reject',
+                                'Delete Claim',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-
-                          // Forward button (if transactions == 2)
-                          if (widget.userRights?.transactions == 2) ...[
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () => _handleAction('F'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.primary,
-                                  side: const BorderSide(
-                                    color: Color(0xFF93C5FD),
-                                  ),
-                                  backgroundColor: const Color(0xFFEFF6FF),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 13,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.forward_rounded, size: 18),
-                                label: const Text(
-                                  'Forward',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                          ],
-
-                          // Approve Button
-                          Expanded(
-                            flex: 1,
-                            child: ElevatedButton.icon(
-                              onPressed: () => _handleAction('A'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF059669),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(vertical: 13),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(Icons.check_rounded, size: 18),
-                              label: const Text(
-                                'Approve',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                          )),
               ),
             )
           : null,
@@ -900,13 +1030,18 @@ class _DetailRowItem extends StatelessWidget {
           label,
           style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
         ),
-        const Spacer(),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
           ),
         ),
       ],

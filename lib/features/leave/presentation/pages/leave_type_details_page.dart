@@ -98,14 +98,29 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
 
   bool _isCurrentUser(String employeeName, String currentUserName) {
     if (currentUserName.trim().isEmpty) return true;
+    final empTrim = employeeName.trim();
+    // If the record doesn't specify employee name (defaults to 'Employee' or empty),
+    // and the list was fetched for the current user's userId, it belongs to this user!
+    if (empTrim.isEmpty || empTrim.toLowerCase() == 'employee') {
+      return true;
+    }
     final cleanEmp =
-        employeeName.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+        empTrim.replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
     final cleanUser =
         currentUserName.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
-    if (cleanEmp.isEmpty || cleanUser.isEmpty) return false;
-    return cleanEmp == cleanUser ||
+    if (cleanEmp.isEmpty || cleanUser.isEmpty) return true;
+    if (cleanEmp == cleanUser ||
         cleanEmp.contains(cleanUser) ||
-        cleanUser.contains(cleanEmp);
+        cleanUser.contains(cleanEmp)) {
+      return true;
+    }
+    // Token matching: e.g. "arun" in "arun p a"
+    final userTokens = cleanUser.split(' ').where((t) => t.isNotEmpty);
+    final empTokens = cleanEmp.split(' ').where((t) => t.isNotEmpty);
+    for (final ut in userTokens) {
+      if (empTokens.contains(ut)) return true;
+    }
+    return false;
   }
 
   void _openApplyModal() {
@@ -244,7 +259,7 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                     ),
                     const Divider(height: 24),
                     _DetailRow(
-                      label: 'Leave Category',
+                      label: 'Leave',
                       value: summaryItem.leaveName,
                     ),
                     _DetailRow(

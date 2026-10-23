@@ -53,10 +53,23 @@ class _LeavePageState extends State<LeavePage> {
         ? empDetails.name
         : (user?.userName ?? '');
 
+    debugPrint(
+      '📋 [LeavePage] _loadLeaveData: Current user="$currentUserName" (login userName="${user?.userName}", empName="${empDetails?.name}")',
+    );
+    debugPrint(
+      '📋 [LeavePage] Fetched ${allApps.length} raw leaves from server',
+    );
+
     // Filter to show ONLY the logged-in user's own leave applications
     final myLeaves = allApps.where((item) {
-      return _isCurrentUser(item.employee, currentUserName);
+      final matches = _isCurrentUser(item.employee, currentUserName);
+      debugPrint(
+        '   👉 Leave #${item.key}: emp="${item.employee}", dates=${item.fromDate} to ${item.toDate}, status="${item.status}", matchesCurrentUser=$matches',
+      );
+      return matches;
     }).toList();
+
+    debugPrint('📋 [LeavePage] Filtered leaves count: ${myLeaves.length}');
 
     // Sort descending by key so the most recent applications appear first
     myLeaves.sort((a, b) => b.key.compareTo(a.key));
@@ -72,14 +85,30 @@ class _LeavePageState extends State<LeavePage> {
 
   bool _isCurrentUser(String employeeName, String currentUserName) {
     if (currentUserName.trim().isEmpty) return true;
-    final cleanEmp =
-        employeeName.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
-    final cleanUser =
-        currentUserName.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
-    if (cleanEmp.isEmpty || cleanUser.isEmpty) return false;
-    return cleanEmp == cleanUser ||
+    final empTrim = employeeName.trim();
+    // If the record doesn't specify employee name (defaults to 'Employee' or empty),
+    // and the list was fetched for the current user's userId, it belongs to this user!
+    if (empTrim.isEmpty || empTrim.toLowerCase() == 'employee') {
+      return true;
+    }
+    final cleanEmp = empTrim.replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+    final cleanUser = currentUserName
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .toLowerCase();
+    if (cleanEmp.isEmpty || cleanUser.isEmpty) return true;
+    if (cleanEmp == cleanUser ||
         cleanEmp.contains(cleanUser) ||
-        cleanUser.contains(cleanEmp);
+        cleanUser.contains(cleanEmp)) {
+      return true;
+    }
+    // Token matching: e.g. "arun" in "arun p a"
+    final userTokens = cleanUser.split(' ').where((t) => t.isNotEmpty);
+    final empTokens = cleanEmp.split(' ').where((t) => t.isNotEmpty);
+    for (final ut in userTokens) {
+      if (empTokens.contains(ut)) return true;
+    }
+    return false;
   }
 
   DateTime? _parseLeaveDate(String dateStr) {
@@ -265,7 +294,9 @@ class _LeavePageState extends State<LeavePage> {
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 12),
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(10),
@@ -273,8 +304,11 @@ class _LeavePageState extends State<LeavePage> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.calendar_today_rounded,
-                                    size: 15, color: AppColors.primary),
+                                const Icon(
+                                  Icons.calendar_today_rounded,
+                                  size: 15,
+                                  color: AppColors.primary,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
@@ -297,10 +331,13 @@ class _LeavePageState extends State<LeavePage> {
                       ),
                       const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Text('-',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textMuted)),
+                        child: Text(
+                          '-',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
                       ),
                       Expanded(
                         child: GestureDetector(
@@ -317,7 +354,9 @@ class _LeavePageState extends State<LeavePage> {
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 12),
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(10),
@@ -325,8 +364,11 @@ class _LeavePageState extends State<LeavePage> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.calendar_today_rounded,
-                                    size: 15, color: AppColors.primary),
+                                const Icon(
+                                  Icons.calendar_today_rounded,
+                                  size: 15,
+                                  color: AppColors.primary,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
@@ -447,7 +489,9 @@ class _LeavePageState extends State<LeavePage> {
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: statusBgColor,
                             borderRadius: BorderRadius.circular(20),
@@ -464,23 +508,14 @@ class _LeavePageState extends State<LeavePage> {
                       ],
                     ),
                     const Divider(height: 24),
-                    _DetailRow(
-                      label: 'Leave Category',
-                      value: summaryItem.leaveName,
-                    ),
+                    _DetailRow(label: 'Leave', value: summaryItem.leaveName),
                     _DetailRow(
                       label: 'Leave Duration',
                       value:
                           '$noOfLeaves ${(noOfLeaves == 1) ? "Day" : "Days"} (${summaryItem.leaveType})',
                     ),
-                    _DetailRow(
-                      label: 'From Date',
-                      value: summaryItem.fromDate,
-                    ),
-                    _DetailRow(
-                      label: 'To Date',
-                      value: summaryItem.toDate,
-                    ),
+                    _DetailRow(label: 'From Date', value: summaryItem.fromDate),
+                    _DetailRow(label: 'To Date', value: summaryItem.toDate),
                     _DetailRow(
                       label: 'Reason',
                       value: reason.isNotEmpty ? reason : 'No reason specified',
@@ -503,19 +538,23 @@ class _LeavePageState extends State<LeavePage> {
                                   context: context,
                                   builder: (ctx) => AlertDialog(
                                     shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(16)),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
                                     title: const Row(
                                       children: [
-                                        Icon(Icons.warning_amber_rounded,
-                                            color: AppColors.error),
+                                        Icon(
+                                          Icons.warning_amber_rounded,
+                                          color: AppColors.error,
+                                        ),
                                         SizedBox(width: 8),
                                         Text('Cancel Leave Request'),
                                       ],
                                     ),
-                                    content: Text(isApproved
-                                        ? 'Are you sure you want to cancel this approved leave application?'
-                                        : 'Are you sure you want to cancel this leave application?'),
+                                    content: Text(
+                                      isApproved
+                                          ? 'Are you sure you want to cancel this approved leave application?'
+                                          : 'Are you sure you want to cancel this leave application?',
+                                    ),
                                     actions: [
                                       TextButton(
                                         onPressed: () =>
@@ -559,11 +598,12 @@ class _LeavePageState extends State<LeavePage> {
                                   ),
                                 );
 
-                                final success =
-                                    await _leaveService.saveLeaveCancellation(
-                                  lvApplicationId: summaryItem.key.toString(),
-                                  remarks: 'Cancel leave request',
-                                );
+                                final success = await _leaveService
+                                    .saveLeaveCancellation(
+                                      lvApplicationId: summaryItem.key
+                                          .toString(),
+                                      remarks: 'Cancel leave request',
+                                    );
 
                                 if (mounted) {
                                   messenger.hideCurrentSnackBar();
@@ -571,7 +611,8 @@ class _LeavePageState extends State<LeavePage> {
                                     messenger.showSnackBar(
                                       const SnackBar(
                                         content: Text(
-                                            'Leave request cancelled successfully!'),
+                                          'Leave request cancelled successfully!',
+                                        ),
                                         backgroundColor: Colors.green,
                                       ),
                                     );
@@ -580,7 +621,8 @@ class _LeavePageState extends State<LeavePage> {
                                     messenger.showSnackBar(
                                       const SnackBar(
                                         content: Text(
-                                            'Failed to cancel leave request. Please try again.'),
+                                          'Failed to cancel leave request. Please try again.',
+                                        ),
                                         backgroundColor: AppColors.error,
                                       ),
                                     );
@@ -600,8 +642,10 @@ class _LeavePageState extends State<LeavePage> {
                                 ),
                               ),
                               onPressed: () => Navigator.pop(context),
-                              child: const Text('Close',
-                                  style: TextStyle(color: Colors.white)),
+                              child: const Text(
+                                'Close',
+                                style: TextStyle(color: Colors.white),
+                              ),
                             ),
                           ),
                         ],
@@ -618,8 +662,10 @@ class _LeavePageState extends State<LeavePage> {
                             ),
                           ),
                           onPressed: () => Navigator.pop(context),
-                          child: const Text('Close',
-                              style: TextStyle(color: Colors.white)),
+                          child: const Text(
+                            'Close',
+                            style: TextStyle(color: Colors.white),
+                          ),
                         ),
                       ),
                     ],
@@ -643,10 +689,7 @@ class _LeavePageState extends State<LeavePage> {
         titleSpacing: 0,
         title: const Text(
           'Leave Management',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
@@ -682,43 +725,52 @@ class _LeavePageState extends State<LeavePage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : !canView
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.lock_person_outlined,
-                            size: 56, color: AppColors.error),
-                        SizedBox(height: 16),
-                        Text(
-                          'Access Restricted',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'You do not have permission (ViewRight) to access Leave Applications. Please contact your system administrator.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 13, color: AppColors.textMuted),
-                        ),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(
+                      Icons.lock_person_outlined,
+                      size: 56,
+                      color: AppColors.error,
                     ),
-                  ),
-                )
-              : _buildLeavesView(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Access Restricted',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'You do not have permission (ViewRight) to access Leave Applications. Please contact your system administrator.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : _buildLeavesView(),
       floatingActionButton: (canView && canAdd)
           ? FloatingActionButton.extended(
               onPressed: _navigateToApplyLeave,
               backgroundColor: AppColors.primary,
               icon: const Icon(Icons.add_rounded, color: Colors.white),
-              label: const Text('Apply Leave',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Apply Leave',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             )
           : null,
     );
@@ -750,21 +802,27 @@ class _LeavePageState extends State<LeavePage> {
             if (_filterStartDate != null || _filterEndDate != null) ...[
               Container(
                 margin: const EdgeInsets.only(bottom: 14),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.2)),
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.filter_alt_outlined,
-                            size: 15, color: AppColors.primary),
+                        const Icon(
+                          Icons.filter_alt_outlined,
+                          size: 15,
+                          color: AppColors.primary,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           'Filtered: $sDateFormatted - $eDateFormatted',
@@ -784,8 +842,11 @@ class _LeavePageState extends State<LeavePage> {
                         });
                         _loadLeaveData();
                       },
-                      child: const Icon(Icons.close_rounded,
-                          size: 16, color: AppColors.primary),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ],
                 ),
@@ -807,8 +868,10 @@ class _LeavePageState extends State<LeavePage> {
                 ),
                 Text(
                   '${displayList.length} records',
-                  style:
-                      const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ],
             ),
@@ -825,8 +888,11 @@ class _LeavePageState extends State<LeavePage> {
                 ),
                 child: Column(
                   children: const [
-                    Icon(Icons.event_busy_rounded,
-                        size: 40, color: AppColors.textMuted),
+                    Icon(
+                      Icons.event_busy_rounded,
+                      size: 40,
+                      color: AppColors.textMuted,
+                    ),
                     SizedBox(height: 8),
                     Text(
                       'No leave applications found',
@@ -876,22 +942,24 @@ class _LeavePageState extends State<LeavePage> {
                                     Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
-                                        color: (item.leaveName
-                                                    .toLowerCase()
-                                                    .contains('sick')
-                                                ? const Color(0xFF0D9488)
-                                                : const Color(0xFF1E88E5))
-                                            .withValues(alpha: 0.12),
+                                        color:
+                                            (item.leaveName
+                                                        .toLowerCase()
+                                                        .contains('sick')
+                                                    ? const Color(0xFF0D9488)
+                                                    : const Color(0xFF1E88E5))
+                                                .withValues(alpha: 0.12),
                                         shape: BoxShape.circle,
                                       ),
                                       child: Icon(
-                                        item.leaveName
-                                                .toLowerCase()
-                                                .contains('sick')
+                                        item.leaveName.toLowerCase().contains(
+                                              'sick',
+                                            )
                                             ? Icons.local_hospital_outlined
                                             : Icons.flight_takeoff_rounded,
                                         size: 18,
-                                        color: item.leaveName
+                                        color:
+                                            item.leaveName
                                                 .toLowerCase()
                                                 .contains('sick')
                                             ? const Color(0xFF0D9488)
@@ -931,7 +999,9 @@ class _LeavePageState extends State<LeavePage> {
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
                                   color: statusBg,
                                   borderRadius: BorderRadius.circular(20),
@@ -948,15 +1018,20 @@ class _LeavePageState extends State<LeavePage> {
                             ],
                           ),
                           const Divider(
-                              height: 20, color: AppColors.cardBorder),
+                            height: 20,
+                            color: AppColors.cardBorder,
+                          ),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Expanded(
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.date_range_outlined,
-                                        size: 15, color: AppColors.primary),
+                                    const Icon(
+                                      Icons.date_range_outlined,
+                                      size: 15,
+                                      color: AppColors.primary,
+                                    ),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
@@ -978,10 +1053,13 @@ class _LeavePageState extends State<LeavePage> {
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
-                                  color:
-                                      AppColors.primary.withValues(alpha: 0.08),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.08,
+                                  ),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -1025,10 +1103,7 @@ class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _DetailRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -1039,10 +1114,7 @@ class _DetailRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.textMuted,
-            ),
+            style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
           ),
           Text(
             value,

@@ -66,6 +66,35 @@ class AuthService {
 
           final user = UserModel.fromJson(firstItem);
 
+          // Check if employee ID or employee code is 0 / empty / inactive
+          final rawEmpId = user.employeeId;
+          final rawEmpCode = user.empCode.trim();
+
+          final bool isEmpIdZero = rawEmpId <= 0;
+          final bool isEmpCodeZero = rawEmpCode == '0' || rawEmpCode == '0.0';
+
+          // Also check explicit Active / IsActive / Status flag if present in response
+          final isActiveRaw =
+              firstItem['IsActive'] ?? firstItem['Active'] ?? firstItem['Status'];
+          bool isExplicitlyInactive = false;
+          if (isActiveRaw != null) {
+            final activeStr = isActiveRaw.toString().trim().toLowerCase();
+            if (activeStr == 'false' ||
+                activeStr == '0' ||
+                activeStr == 'n' ||
+                activeStr == 'inactive') {
+              isExplicitlyInactive = true;
+            }
+          }
+
+          if (isEmpIdZero || isEmpCodeZero || isExplicitlyInactive) {
+            await LocalStorageService.clearUserSession();
+            return LoginResult(
+              isSuccess: false,
+              errorMessage: 'User not Active',
+            );
+          }
+
           // Save user session in local storage
           await LocalStorageService.saveUser(user);
 

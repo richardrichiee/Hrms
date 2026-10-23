@@ -5,6 +5,7 @@ import '../../../auth/data/models/user_rights_model.dart';
 import '../../data/models/claim_models.dart';
 import '../../data/services/claim_service.dart';
 import '../widgets/apply_claim_dialog.dart';
+import 'claim_approval_details_page.dart';
 
 class ClaimsPage extends StatefulWidget {
   const ClaimsPage({super.key});
@@ -269,168 +270,34 @@ class _ClaimsPageState extends State<ClaimsPage> {
     );
   }
 
-  void _showClaimDetailsModal(ClaimModel item) {
-    final canDelete = _userRights?.delRight ?? true;
-    final isPending = item.approvalStatus.toUpperCase() == 'N' ||
-        item.approvalStatus.toUpperCase() == 'PENDING';
+  Future<void> _openClaimDetails(ClaimModel item) async {
+    final itemMap = {
+      'id': item.id,
+      'claimNo': item.claimNumber,
+      'applicant': item.employeeName,
+      'amount': item.amount.toString(),
+      'status': item.approvalStatus,
+      'date': item.claimDate,
+      'fromDate': item.claimDate,
+      'reason': item.remarks,
+      'branch': item.branchId,
+    };
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ClaimApprovalDetailsPage(
+          claimId: item.id,
+          itemData: itemMap,
+          userRights: _userRights,
+          isApprover: false,
+        ),
       ),
-      builder: (context) {
-        Color statusBgColor = Colors.green.withValues(alpha: 0.1);
-        Color statusTextColor = Colors.green;
-        if (item.approvalStatusText == 'Pending') {
-          statusBgColor = Colors.orange.withValues(alpha: 0.1);
-          statusTextColor = Colors.orange;
-        } else if (item.approvalStatusText == 'Rejected') {
-          statusBgColor = Colors.red.withValues(alpha: 0.1);
-          statusTextColor = Colors.red;
-        } else if (item.approvalStatusText == 'Forward') {
-          statusBgColor = Colors.blue.withValues(alpha: 0.1);
-          statusTextColor = Colors.blue;
-        }
-
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 20.0,
-              right: 20.0,
-              top: 20.0,
-              bottom: MediaQuery.of(context).padding.bottom + 20.0,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Claim Details #${item.id > 0 ? item.id : item.claimNumber}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: statusBgColor,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        item.approvalStatusText,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: statusTextColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const Divider(height: 24),
-                if (item.employeeName.isNotEmpty)
-                  _DetailRow(
-                    label: 'Employee',
-                    value: item.employeeName,
-                  ),
-                _DetailRow(
-                  label: 'Submitted Date',
-                  value: item.claimDate.isNotEmpty ? item.claimDate : 'Today',
-                ),
-                _DetailRow(
-                  label: 'Total Amount',
-                  value: '₹ ${item.amount.toStringAsFixed(2)}',
-                ),
-                _DetailRow(
-                  label: 'Remarks',
-                  value: item.remarks.isNotEmpty ? item.remarks : 'None',
-                ),
-                if (item.tailItems.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Line Items Breakdown',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  ...item.tailItems.map((tail) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '• ${tail.claimName} (${tail.reason})',
-                              style: const TextStyle(
-                                  fontSize: 12, color: AppColors.textMuted),
-                            ),
-                            Text(
-                              '₹ ${tail.amount.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      )),
-                ],
-                const SizedBox(height: 20),
-
-                Row(
-                  children: [
-                    if (canDelete && isPending) ...[
-                      Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            side: const BorderSide(color: AppColors.error),
-                          ),
-                          onPressed: () async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            Navigator.pop(context);
-                            final success =
-                                await _claimService.deleteClaim(item.id);
-                            if (mounted && success) {
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content:
-                                      Text('Claim deleted successfully!'),
-                                  backgroundColor: Colors.orange,
-                                ),
-                              );
-                              _loadClaimsData();
-                            }
-                          },
-                          child: const Text('Delete Claim'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Close'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
+
+    if (result == true) {
+      _loadClaimsData();
+    }
   }
 
   @override
@@ -684,7 +551,7 @@ class _ClaimsPageState extends State<ClaimsPage> {
                   }
 
                   return GestureDetector(
-                    onTap: () => _showClaimDetailsModal(item),
+                    onTap: () => _openClaimDetails(item),
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -732,7 +599,7 @@ class _ClaimsPageState extends State<ClaimsPage> {
                                         ),
                                       ),
                                       Text(
-                                        'Claim #${item.id > 0 ? item.id : item.claimNumber}${item.employeeName.isNotEmpty ? " • ${item.employeeName}" : ""}',
+                                        'Claim #${item.id > 0 ? item.id : item.claimNumber}',
                                         style: const TextStyle(
                                           fontSize: 11,
                                           color: AppColors.textMuted,
@@ -806,39 +673,7 @@ class _ClaimsPageState extends State<ClaimsPage> {
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
 
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _ClaimSummaryCard extends StatelessWidget {
   final String title;
