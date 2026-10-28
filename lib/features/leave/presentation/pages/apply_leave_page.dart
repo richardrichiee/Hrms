@@ -144,21 +144,26 @@ class _ApplyLeavePageState extends State<ApplyLeavePage> {
                           ? const Color(0xFF1E88E5)
                           : const Color(0xFF7C3AED));
 
-                  final val = b.closing;
+                  final val = b.closing < 0 ? 0.0 : b.closing;
                   final balanceText = (val % 1 == 0)
                       ? '${val.toInt()} ${val == 1 ? "Day" : "Days"}'
                       : '$val Days';
 
+                  final formattedTitle = b.leaveName.split(' ').map((word) {
+                    if (word.isEmpty) return word;
+                    return word[0].toUpperCase() + word.substring(1).toLowerCase();
+                  }).join(' ');
+
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 14),
                     child: _LeaveCategoryCard(
-                      title: b.leaveName,
+                      title: formattedTitle,
                       balanceText: balanceText,
                       icon: icon,
                       color: color,
                       onTap: () => _openApplyLeaveModal(
                         leaveId: b.leaveId.toString(),
-                        leaveName: b.leaveName,
+                        leaveName: formattedTitle,
                       ),
                     ),
                   );

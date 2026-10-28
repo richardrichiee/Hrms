@@ -40,8 +40,13 @@ class ChangePasswordService {
     required String newPassword,
   }) async {
     try {
-      final accessPoint =
-          await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) {
+        return const ChangePasswordResult(
+          isSuccess: false,
+          message: 'Company access point not configured.',
+        );
+      }
       final user = await LocalStorageService.getUser();
       final targetId = (user != null && user.userId > 0)
           ? user.userId

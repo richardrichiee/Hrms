@@ -557,6 +557,15 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     // Refresh branch data from local storage to ensure fresh coordinates
+    final user = await LocalStorageService.getUser();
+    final punchAnywhereFlag = await LocalStorageService.getOnlinePunchAnywhere();
+    final canPunchAnywhere =
+        (user?.canPunchAnywhere ?? false) || punchAnywhereFlag == 1;
+
+    debugPrint(
+      '[CheckIn] OnlinePunchAnywhere: $punchAnywhereFlag, canPunchAnywhere: $canPunchAnywhere',
+    );
+
     final savedBranchId =
         await LocalStorageService.getSelectedBranchId() ??
         _selectedBranch?.value ??
@@ -568,6 +577,8 @@ class _DashboardPageState extends State<DashboardPage> {
     } catch (_) {
       branch = _selectedBranch;
     }
+
+    branch ??= (cachedBranches.isNotEmpty ? cachedBranches.first : _selectedBranch);
 
     if (branch != null) {
       _selectedBranch = branch;
@@ -581,170 +592,221 @@ class _DashboardPageState extends State<DashboardPage> {
       '[CheckIn] Branch Coords: Lat: ${branch?.latitude}, Lng: ${branch?.longitude}, Radius: ${branch?.radius}m',
     );
 
-    if (branch == null ||
-        branch.latitude == null ||
-        branch.longitude == null ||
-        branch.latitude == 0.0 ||
-        branch.longitude == 0.0 ||
-        branch.radius == null) {
-      debugPrint('❌ [CheckIn Error] Branch location is NOT configured!');
-      _showLocationDialog(
-        title: 'Location Not Configured',
-        message: 'Branch location coordinates are not configured.',
-        icon: Icons.location_off_rounded,
-        iconColor: AppColors.error,
+    if (!canPunchAnywhere) {
+      if (branch == null ||
+          branch.latitude == null ||
+          branch.longitude == null ||
+          branch.latitude == 0.0 ||
+          branch.longitude == 0.0 ||
+          branch.radius == null) {
+        debugPrint('❌ [CheckIn Error] Branch location is NOT configured!');
+        _showLocationDialog(
+          title: 'Location Not Configured',
+          message: 'Branch location coordinates are not configured.',
+          icon: Icons.location_off_rounded,
+          iconColor: AppColors.error,
+        );
+        return;
+      }
+    } else {
+      branch ??= BranchModel(
+        value: savedBranchId > 0 ? savedBranchId : 1,
+        name: 'Online Branch',
+        latitude: 0.0,
+        longitude: 0.0,
+        radius: 0.0,
       );
-      return;
     }
 
     setState(() => _isLocationChecking = true);
 
     try {
-      debugPrint('[CheckIn] Checking if device GPS service is enabled...');
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      debugPrint('[CheckIn] GPS service enabled: $serviceEnabled');
-      if (!serviceEnabled) {
-        debugPrint(
-          '❌ [CheckIn Error] Location services are DISABLED on device',
-        );
-        if (!mounted) return;
-        _showLocationDialog(
-          title: 'Location Services Disabled',
-          message:
-              'Please enable GPS/Location services on your device to verify branch attendance.',
-          icon: Icons.location_disabled_rounded,
-          iconColor: Colors.orange,
-        );
-        return;
-      }
+      Position? position;
 
-      debugPrint('[CheckIn] Checking location permission...');
-      LocationPermission permission = await Geolocator.checkPermission();
-      debugPrint('[CheckIn] Initial location permission: $permission');
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        debugPrint('[CheckIn] Requested permission result: $permission');
-        if (permission == LocationPermission.denied) {
-          debugPrint('❌ [CheckIn Error] Location permission denied by user');
+      if (!canPunchAnywhere) {
+        debugPrint('[CheckIn] Checking if device GPS service is enabled...');
+        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        debugPrint('[CheckIn] GPS service enabled: $serviceEnabled');
+        if (!serviceEnabled) {
+          debugPrint(
+            '❌ [CheckIn Error] Location services are DISABLED on device',
+          );
           if (!mounted) return;
           _showLocationDialog(
-            title: 'Permission Denied',
+            title: 'Location Services Disabled',
             message:
-                'Location permission is required to verify your branch attendance.',
-            icon: Icons.security_rounded,
+                'Please enable GPS/Location services on your device to verify branch attendance.',
+            icon: Icons.location_disabled_rounded,
+            iconColor: Colors.orange,
+          );
+          return;
+        }
+
+        debugPrint('[CheckIn] Checking location permission...');
+        LocationPermission permission = await Geolocator.checkPermission();
+        debugPrint('[CheckIn] Initial location permission: $permission');
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+          debugPrint('[CheckIn] Requested permission result: $permission');
+          if (permission == LocationPermission.denied) {
+            debugPrint('❌ [CheckIn Error] Location permission denied by user');
+            if (!mounted) return;
+            _showLocationDialog(
+              title: 'Permission Denied',
+              message:
+                  'Location permission is required to verify your branch attendance.',
+              icon: Icons.security_rounded,
+              iconColor: AppColors.error,
+            );
+            return;
+          }
+        }
+
+        if (permission == LocationPermission.deniedForever) {
+          debugPrint('❌ [CheckIn Error] Location permission permanently denied');
+          if (!mounted) return;
+          _showLocationDialog(
+            title: 'Permission Permanently Denied',
+            message:
+                'Location permissions are permanently denied. Please enable them in your device settings to check in or out.',
+            icon: Icons.settings_rounded,
             iconColor: AppColors.error,
           );
           return;
         }
-      }
 
-      if (permission == LocationPermission.deniedForever) {
-        debugPrint('❌ [CheckIn Error] Location permission permanently denied');
-        if (!mounted) return;
-        _showLocationDialog(
-          title: 'Permission Permanently Denied',
-          message:
-              'Location permissions are permanently denied. Please enable them in your device settings to check in or out.',
-          icon: Icons.settings_rounded,
-          iconColor: AppColors.error,
-        );
-        return;
-      }
+        debugPrint('[CheckIn] Acquiring GPS location...');
+        try {
+          // 1. Allow GPS up to 8s to lock onto satellites during cold app starts
+          position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 8),
+            ),
+          );
+        } catch (gpsErr) {
+          debugPrint(
+            '[CheckIn] Primary GPS lock timed out/failed ($gpsErr). Checking lastKnownPosition...',
+          );
+          // 2. Only use lastKnownPosition if fresh (< 120s old). Never trust stale locations!
+          final lastKnown = await Geolocator.getLastKnownPosition();
+          if (lastKnown != null) {
+            final age = DateTime.now()
+                .difference(lastKnown.timestamp)
+                .inSeconds
+                .abs();
+            if (age < 120) {
+              position = lastKnown;
+              debugPrint(
+                '[CheckIn] Using fresh lastKnownPosition (age: ${age}s)',
+              );
+            }
+          }
 
-      debugPrint('[CheckIn] Acquiring GPS location...');
-      Position? position;
-      try {
-        // 1. Allow GPS up to 8s to lock onto satellites during cold app starts
-        position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.medium,
-            timeLimit: Duration(seconds: 8),
-          ),
-        );
-      } catch (gpsErr) {
+          // 3. If stale or null, retry with low/balanced accuracy for 5 seconds
+          if (position == null) {
+            try {
+              debugPrint('[CheckIn] Retrying with low accuracy for 5s...');
+              position = await Geolocator.getCurrentPosition(
+                locationSettings: const LocationSettings(
+                  accuracy: LocationAccuracy.low,
+                  timeLimit: Duration(seconds: 5),
+                ),
+              );
+            } catch (_) {}
+          }
+
+          // 4. Last resort fallback
+          position ??= lastKnown;
+        }
+
+        if (position == null) {
+          debugPrint('❌ [CheckIn Error] Unable to acquire device GPS position');
+          throw TimeoutException(
+            'Unable to acquire current location. Please ensure GPS is enabled and try again.',
+          );
+        }
+
         debugPrint(
-          '[CheckIn] Primary GPS lock timed out/failed ($gpsErr). Checking lastKnownPosition...',
+          '📍 [CheckIn] Device GPS: Lat: ${position.latitude}, Lng: ${position.longitude}, Accuracy: ${position.accuracy}m',
         );
-        // 2. Only use lastKnownPosition if fresh (< 120s old). Never trust stale locations!
-        final lastKnown = await Geolocator.getLastKnownPosition();
-        if (lastKnown != null) {
-          final age = DateTime.now()
-              .difference(lastKnown.timestamp)
-              .inSeconds
-              .abs();
-          if (age < 120) {
-            position = lastKnown;
+        final distance = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          branch.latitude!,
+          branch.longitude!,
+        );
+
+        // Account for realistic mobile device indoor GPS accuracy margin (up to 30m)
+        final tolerance = position.accuracy.clamp(0.0, 30.0);
+        final effectiveDistance = (distance - tolerance) > 0
+            ? (distance - tolerance)
+            : 0.0;
+
+        debugPrint(
+          '[CheckIn] Distance to branch: ${distance.toStringAsFixed(2)}m',
+        );
+        debugPrint(
+          '[CheckIn] Accuracy tolerance: ${tolerance.toStringAsFixed(2)}m',
+        );
+        debugPrint(
+          '[CheckIn] Effective distance: ${effectiveDistance.toStringAsFixed(2)}m (Allowed radius: ${branch.radius}m)',
+        );
+
+        if (effectiveDistance > branch.radius!) {
+          debugPrint(
+            '❌ [CheckIn Error] Outside branch area! (${distance.toStringAsFixed(0)}m away, radius: ${branch.radius}m)',
+          );
+          if (!mounted) return;
+          _showLocationDialog(
+            title: 'Outside Branch Area',
+            message: 'You are outside the branch area.',
+            icon: Icons.wrong_location_rounded,
+            iconColor: AppColors.error,
+          );
+          return;
+        }
+
+        debugPrint('✅ [CheckIn] Geofence check PASSED! Preparing punch data...');
+      } else {
+        debugPrint(
+          '🚀 [CheckIn] OnlinePunchAnywhere is ENABLED (flag = 1). Geofence check bypassed! Capturing GPS coordinates if available...',
+        );
+        try {
+          final isGpsOn = await Geolocator.isLocationServiceEnabled();
+          if (isGpsOn) {
+            LocationPermission permission = await Geolocator.checkPermission();
+            if (permission == LocationPermission.denied) {
+              permission = await Geolocator.requestPermission();
+            }
+            if (permission == LocationPermission.whileInUse ||
+                permission == LocationPermission.always) {
+              try {
+                position = await Geolocator.getCurrentPosition(
+                  locationSettings: const LocationSettings(
+                    accuracy: LocationAccuracy.medium,
+                    timeLimit: Duration(seconds: 5),
+                  ),
+                );
+              } catch (_) {
+                position = await Geolocator.getLastKnownPosition();
+              }
+            }
+          }
+          if (position != null) {
             debugPrint(
-              '[CheckIn] Using fresh lastKnownPosition (age: ${age}s)',
+              '📍 [CheckIn Online] Device GPS captured: Lat: ${position.latitude}, Lng: ${position.longitude}',
+            );
+          } else {
+            debugPrint(
+              'ℹ️ [CheckIn Online] GPS not available, proceeding without coordinates.',
             );
           }
+        } catch (e) {
+          debugPrint('ℹ️ [CheckIn Online] Location capture skipped: $e');
         }
-
-        // 3. If stale or null, retry with low/balanced accuracy for 5 seconds
-        if (position == null) {
-          try {
-            debugPrint('[CheckIn] Retrying with low accuracy for 5s...');
-            position = await Geolocator.getCurrentPosition(
-              locationSettings: const LocationSettings(
-                accuracy: LocationAccuracy.low,
-                timeLimit: Duration(seconds: 5),
-              ),
-            );
-          } catch (_) {}
-        }
-
-        // 4. Last resort fallback
-        position ??= lastKnown;
       }
 
-      if (position == null) {
-        debugPrint('❌ [CheckIn Error] Unable to acquire device GPS position');
-        throw TimeoutException(
-          'Unable to acquire current location. Please ensure GPS is enabled and try again.',
-        );
-      }
-
-      debugPrint(
-        '📍 [CheckIn] Device GPS: Lat: ${position.latitude}, Lng: ${position.longitude}, Accuracy: ${position.accuracy}m',
-      );
-      final distance = Geolocator.distanceBetween(
-        position.latitude,
-        position.longitude,
-        branch.latitude!,
-        branch.longitude!,
-      );
-
-      // Account for realistic mobile device indoor GPS accuracy margin (up to 30m)
-      final tolerance = position.accuracy.clamp(0.0, 30.0);
-      final effectiveDistance = (distance - tolerance) > 0
-          ? (distance - tolerance)
-          : 0.0;
-
-      debugPrint(
-        '[CheckIn] Distance to branch: ${distance.toStringAsFixed(2)}m',
-      );
-      debugPrint(
-        '[CheckIn] Accuracy tolerance: ${tolerance.toStringAsFixed(2)}m',
-      );
-      debugPrint(
-        '[CheckIn] Effective distance: ${effectiveDistance.toStringAsFixed(2)}m (Allowed radius: ${branch.radius}m)',
-      );
-
-      if (effectiveDistance > branch.radius!) {
-        debugPrint(
-          '❌ [CheckIn Error] Outside branch area! (${distance.toStringAsFixed(0)}m away, radius: ${branch.radius}m)',
-        );
-        if (!mounted) return;
-        _showLocationDialog(
-          title: 'Outside Branch Area',
-          message: 'You are outside the branch area.',
-          icon: Icons.wrong_location_rounded,
-          iconColor: AppColors.error,
-        );
-        return;
-      }
-
-      debugPrint('✅ [CheckIn] Geofence check PASSED! Preparing punch data...');
       if (!mounted) return;
       final now = DateTime.now();
       final timeStr =
@@ -755,17 +817,18 @@ class _DashboardPageState extends State<DashboardPage> {
         timeFlag: newFlag,
       ).formattedTime;
       final dateFormatted = DateFormat('dd/MM/yyyy').format(now);
-      final user = await LocalStorageService.getUser();
       final empId = user?.employeeId ?? 1;
       final accessPoint =
-          await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+          await LocalStorageService.getAccessPoint() ?? '';
+      final branchId = branch.id;
+      final branchName = branch.name;
 
       debugPrint('[CheckIn] Access Point: $accessPoint');
       debugPrint(
         '[CheckIn] User: userId=${user?.userId}, employeeId=$empId, userName=${user?.userName}',
       );
       debugPrint(
-        '[CheckIn] Punch Parameters: inOutTime=$timeStr, timeFlag=$newFlag, date=$dateFormatted, branchId=${branch.id}',
+        '[CheckIn] Punch Parameters: inOutTime=$timeStr, timeFlag=$newFlag, date=$dateFormatted, branchId=$branchId',
       );
 
       // 1. Post punch live to server (preserves first inTime on daily attendance Tail, logs every swipe to Tail2)
@@ -775,16 +838,24 @@ class _DashboardPageState extends State<DashboardPage> {
       // On Check In (newFlag == 0), OutTime MUST be empty ("") because the employee is checked in, not out!
       final outTimeForTail = newFlag == 1 ? timeStr : '';
 
-      debugPrint('[CheckIn] Calling saveAttendanceWithResult...');
+      final reason = canPunchAnywhere
+          ? (newFlag == 0 ? 'Online Check In' : 'Online Check Out')
+          : (newFlag == 0 ? 'Mobile Check In' : 'Mobile Check Out');
+
+      debugPrint(
+        '[CheckIn] Calling saveAttendanceWithResult (Lat: ${position?.latitude}, Lng: ${position?.longitude})...',
+      );
       final saveResult = await _attendanceService.saveAttendanceWithResult(
-        branchId: branch.id,
+        branchId: branchId,
         employeeId: empId,
         inOutTime: timeStr,
         timeFlag: newFlag,
         date: dateFormatted,
-        reason: newFlag == 0 ? 'Mobile Check In' : 'Mobile Check Out',
+        reason: reason,
         inTime: inTimeForTail,
         outTime: outTimeForTail,
+        latitude: position?.latitude,
+        longitude: position?.longitude,
       );
 
       debugPrint(
@@ -846,6 +917,14 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       });
 
+      final successText = canPunchAnywhere
+          ? (_isCheckedIn
+              ? 'Checked in successfully (Online)!'
+              : 'Checked out successfully (Online)!')
+          : (_isCheckedIn
+              ? 'Checked in successfully at $branchName!'
+              : 'Checked out successfully at $branchName!');
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -857,11 +936,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  _isCheckedIn
-                      ? 'Checked in successfully at ${branch.name}!'
-                      : 'Checked out successfully at ${branch.name}!',
-                ),
+                child: Text(successText),
               ),
             ],
           ),

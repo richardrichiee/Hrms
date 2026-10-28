@@ -17,7 +17,8 @@ class AttendanceService {
 
   Future<List<AttendanceLogModel>> fetchMonthlyAttendanceLogs({String? date}) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) return [];
       final user = await LocalStorageService.getUser();
       final employeeId = user?.employeeId ?? 1;
 
@@ -56,7 +57,8 @@ class AttendanceService {
     int? employeeId,
   }) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) return null;
       final user = await LocalStorageService.getUser();
       final empId = employeeId ?? user?.employeeId ?? 1;
 
@@ -96,7 +98,8 @@ class AttendanceService {
     int? employeeId,
   }) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) return [];
       final user = await LocalStorageService.getUser();
       final empId = employeeId ?? user?.employeeId ?? 1;
 
@@ -140,10 +143,17 @@ class AttendanceService {
     String? reason,
     String? inTime,
     String? outTime,
+    double? latitude,
+    double? longitude,
   }) async {
     try {
-      final accessPoint =
-          await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) {
+        return const AttendanceSaveResult(
+          success: false,
+          errorMessage: 'Company access point not configured.',
+        );
+      }
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
 
@@ -185,6 +195,8 @@ class AttendanceService {
             "Reason": reason ??
                 (timeFlag == 0 ? "Mobile Check In" : "Mobile Check Out"),
             "TimeFlag": timeFlag.toString(),
+            "Latitude": latitude?.toString(),
+            "Longitude": longitude?.toString(),
           }
         ]
       };
@@ -295,6 +307,8 @@ class AttendanceService {
                   "Reason": reason ??
                       (timeFlag == 0 ? "Mobile Check In" : "Mobile Check Out"),
                   "TimeFlag": timeFlag.toString(),
+                  "Latitude": latitude?.toString(),
+                  "Longitude": longitude?.toString(),
                 }
               ]
             };
@@ -414,6 +428,8 @@ class AttendanceService {
     String? reason,
     String? inTime,
     String? outTime,
+    double? latitude,
+    double? longitude,
   }) async {
     final res = await saveAttendanceWithResult(
       branchId: branchId,
@@ -424,6 +440,8 @@ class AttendanceService {
       reason: reason,
       inTime: inTime,
       outTime: outTime,
+      latitude: latitude,
+      longitude: longitude,
     );
     return res.success;
   }

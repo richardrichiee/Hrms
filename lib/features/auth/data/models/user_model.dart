@@ -6,7 +6,10 @@ class UserModel {
   final String empCode;
   final String serverDate;
   final int roleId;
+  final int onlinePunchAnywhere;
   final String? errorMessage;
+
+  bool get canPunchAnywhere => onlinePunchAnywhere == 1;
 
   UserModel({
     required this.company,
@@ -16,6 +19,7 @@ class UserModel {
     this.empCode = '',
     required this.serverDate,
     required this.roleId,
+    this.onlinePunchAnywhere = 0,
     this.errorMessage,
   });
 
@@ -50,6 +54,11 @@ class UserModel {
               json['RoleId']?.toString() ??
               '0') ??
           0,
+      onlinePunchAnywhere: int.tryParse(json['OnlinePunchAnywhere']?.toString() ??
+              json['onlinePunchAnywhere']?.toString() ??
+              json['PunchAnywhere']?.toString() ??
+              '0') ??
+          0,
       errorMessage: json['ErrorMessage'] as String?,
     );
   }
@@ -63,6 +72,7 @@ class UserModel {
       'EmpCode': empCode,
       'ServerDate': serverDate,
       'RoleID': roleId,
+      'OnlinePunchAnywhere': onlinePunchAnywhere,
       'ErrorMessage': errorMessage,
     };
   }

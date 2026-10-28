@@ -13,7 +13,8 @@ class EmployeeService {
 
   Future<EmployeeDetailsModel?> fetchEmployeeDashboard({String? date}) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) return null;
       final user = await LocalStorageService.getUser();
       final employeeId = user?.employeeId ?? 1;
 

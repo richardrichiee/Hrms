@@ -13,7 +13,8 @@ class InboxService {
   /// POST /api/HRM/General/v1/Inbox/{accessPoint}/{timeStamp}
   Future<List<Map<String, dynamic>>> fetchInboxSummary() async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) return [];
       final user = await LocalStorageService.getUser();
       final userId = user?.userId.toString() ?? '2';
 
@@ -55,7 +56,8 @@ class InboxService {
     required String menuLinkCode,
   }) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) return [];
       final user = await LocalStorageService.getUser();
       final userId = user?.userId.toString() ?? '2';
 

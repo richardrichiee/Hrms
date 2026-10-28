@@ -55,6 +55,7 @@ class _ClaimsPageState extends State<ClaimsPage> {
         _claims = results[1] as List<ClaimModel>;
         _isLoading = false;
       });
+      debugPrint('📋 [ClaimsPage] Loaded ${_claims.length} claims for period "$fDate" - "$tDate"');
     }
   }
 

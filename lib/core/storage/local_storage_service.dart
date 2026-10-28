@@ -128,11 +128,44 @@ class LocalStorageService {
     }
   }
 
+  static const String keyOnlinePunchAnywhere = 'key_online_punch_anywhere';
+
+  static Future<void> saveOnlinePunchAnywhere(int value) async {
+    try {
+      final prefs = await _getPrefs();
+      await prefs.setInt(keyOnlinePunchAnywhere, value);
+      await _storage.write(key: keyOnlinePunchAnywhere, value: value.toString());
+    } catch (_) {}
+  }
+
+  static Future<int> getOnlinePunchAnywhere() async {
+    try {
+      final prefs = await _getPrefs();
+      if (prefs.containsKey(keyOnlinePunchAnywhere)) {
+        return prefs.getInt(keyOnlinePunchAnywhere) ?? 0;
+      }
+      final str = await _storage.read(key: keyOnlinePunchAnywhere);
+      if (str != null && str.isNotEmpty) {
+        return int.tryParse(str) ?? 0;
+      }
+      final user = await getUser();
+      return user?.onlinePunchAnywhere ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static Future<bool> canPunchAnywhere() async {
+    final flag = await getOnlinePunchAnywhere();
+    return flag == 1;
+  }
+
   static Future<void> clearUserSession() async {
     try {
       final prefs = await _getPrefs();
       await prefs.remove(keyUserData);
       await prefs.setBool(keyIsLoggedIn, false);
+      await prefs.remove(keyOnlinePunchAnywhere);
       await prefs.remove(keyTodayPunchHistory);
       await prefs.remove(keyTodayPunchDate);
       await prefs.remove(keyLastPunchDate);
@@ -142,6 +175,7 @@ class LocalStorageService {
       await prefs.remove(keySelectedBranchId);
       await _storage.delete(key: keyUserData);
       await _storage.delete(key: keyIsLoggedIn);
+      await _storage.delete(key: keyOnlinePunchAnywhere);
     } catch (_) {}
   }
 

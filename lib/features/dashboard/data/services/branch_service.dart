@@ -13,8 +13,11 @@ class BranchService {
 
   Future<List<BranchModel>> fetchBranches() async {
     try {
-      final accessPoint =
-          await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) {
+        final cached = await LocalStorageService.getBranches();
+        return cached;
+      }
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
 
@@ -60,8 +63,8 @@ class BranchService {
     required double radius,
   }) async {
     try {
-      final accessPoint =
-          await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) return false;
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
 

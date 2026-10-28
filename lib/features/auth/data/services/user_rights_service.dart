@@ -11,7 +11,10 @@ class UserRightsService {
     int? branchId,
   }) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) {
+        return UserRightsModel.noAccess();
+      }
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
       final activeBranchId = branchId ?? 1;

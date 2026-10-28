@@ -86,15 +86,38 @@ class EmployeeDetailsModel {
   }) {
     final balances = <LeaveBalanceItem>[];
     if (table1 != null) {
+      final Map<String, LeaveBalanceItem> grouped = {};
       for (final item in table1) {
+        final Map<String, dynamic> raw;
         if (item is Map<String, dynamic>) {
-          balances.add(LeaveBalanceItem.fromJson(item));
+          raw = item;
         } else if (item is Map) {
-          balances.add(
-            LeaveBalanceItem.fromJson(Map<String, dynamic>.from(item)),
+          raw = Map<String, dynamic>.from(item);
+        } else {
+          continue;
+        }
+        final parsed = LeaveBalanceItem.fromJson(raw);
+        final key = parsed.leaveId > 0
+            ? parsed.leaveId.toString()
+            : parsed.leaveName.trim().toUpperCase();
+
+        if (grouped.containsKey(key)) {
+          final existing = grouped[key]!;
+          final preferredName = existing.leaveName.length >= parsed.leaveName.length
+              ? existing.leaveName
+              : parsed.leaveName;
+          grouped[key] = LeaveBalanceItem(
+            leaveId: parsed.leaveId > 0 ? parsed.leaveId : existing.leaveId,
+            leaveName: preferredName,
+            opening: existing.opening + parsed.opening,
+            taken: existing.taken + parsed.taken,
+            closing: existing.closing + parsed.closing,
           );
+        } else {
+          grouped[key] = parsed;
         }
       }
+      balances.addAll(grouped.values);
     }
 
     return EmployeeDetailsModel(

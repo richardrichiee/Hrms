@@ -38,9 +38,16 @@ class LeaveService {
     return rawDate;
   }
 
+  Future<String?> _getValidAccessPoint() async {
+    final ap = await LocalStorageService.getAccessPoint();
+    if (ap == null || ap.trim().isEmpty) return null;
+    return ap.trim();
+  }
+
   Future<List<LeaveApplicationModel>> fetchLeaveApplications() async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await _getValidAccessPoint();
+      if (accessPoint == null) return [];
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
 
@@ -92,7 +99,8 @@ class LeaveService {
 
   Future<LeaveDetailsModel?> fetchLeaveApplicationDetails(int key) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await _getValidAccessPoint();
+      if (accessPoint == null) return null;
 
       final url = AppUrls.getLeaveApplicationDetailsUrl(
         key: key,
@@ -128,7 +136,13 @@ class LeaveService {
     required String toDate,
   }) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await _getValidAccessPoint();
+      if (accessPoint == null) {
+        return const LeaveCalculationResult(
+          days: 0.0,
+          errorMessage: 'Company access point not configured.',
+        );
+      }
       final user = await LocalStorageService.getUser();
       final empId = (user?.employeeId != null && user!.employeeId > 0)
           ? user.employeeId.toString()
@@ -284,7 +298,13 @@ class LeaveService {
     String? approvalStatus,
   }) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await _getValidAccessPoint();
+      if (accessPoint == null) {
+        return const LeaveSaveResult(
+          success: false,
+          errorMessage: 'Company access point not configured.',
+        );
+      }
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
       final empId = (user?.employeeId != null && user!.employeeId > 0)
@@ -555,7 +575,8 @@ class LeaveService {
     String? remarks,
   }) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await _getValidAccessPoint();
+      if (accessPoint == null) return false;
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
 
@@ -648,7 +669,8 @@ class LeaveService {
 
   Future<Map<String, dynamic>?> fetchLeaveCancellationDetails(int key) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await _getValidAccessPoint();
+      if (accessPoint == null) return null;
       final url = AppUrls.getLeaveCancellationDetailsUrl(
         key: key,
         accessPoint: accessPoint,
@@ -679,14 +701,15 @@ class LeaveService {
   Future<bool> saveLeaveCancellation({
     required String lvApplicationId,
     required String remarks,
-    String approvalStatus = "N", // "N" for Request, "A" for Manager Approval, "R" for Manager Reject
+    String? approvalStatus, // "N" for Request, "A" for Manager Approval, "R" for Manager Reject
     int cancellationId = 0,
     Map<String, dynamic>? itemData,
   }) async {
     String resolvedLvAppId = lvApplicationId;
 
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await _getValidAccessPoint();
+      if (accessPoint == null) return false;
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
       final raw = itemData?['raw'] as Map<String, dynamic>?;
@@ -695,6 +718,19 @@ class LeaveService {
           itemData?['branchId']?.toString() ??
           "1";
       String resolvedBranchId = branchId;
+
+      // Check transaction hierarchy from UserRights (MenuCode 19):
+      // 1 = No hierarchy, 2 = Forward, 3 = Approve/Reject
+      // If transactions == 3, the user has Level 3 approval authority, so cancellation is straight approved ('A')
+      String finalApprovalStatus = approvalStatus ?? 'N';
+      if (finalApprovalStatus != 'A') {
+        try {
+          final rights = await UserRightsService().fetchUserRights(menuCode: 19);
+          if (rights.transactions == 3) {
+            finalApprovalStatus = 'A';
+          }
+        } catch (_) {}
+      }
 
       // If cancellationId > 0, fetch the cancellation details to retrieve the true LvApplicationID and BranchID!
       if (cancellationId > 0) {
@@ -723,7 +759,7 @@ class LeaveService {
         "Head": {
           "LvCancelID": cancellationId > 0 ? cancellationId.toString() : "0",
           "LvApplicationID": resolvedLvAppId,
-          "ApprovalStatus": approvalStatus,
+          "ApprovalStatus": finalApprovalStatus,
           "Remarks": remarks,
           "BranchID": resolvedBranchId,
         }
@@ -747,7 +783,7 @@ class LeaveService {
                 (data['error'] is Map && (data['error'] as Map).isEmpty))) {
           // If manager approved ('A') the cancellation, also synchronize the underlying
           // leave application's status to 'C' (Cancelled) so it updates across all dashboards
-          if (approvalStatus == 'A') {
+          if (finalApprovalStatus == 'A') {
             final key = int.tryParse(resolvedLvAppId);
             if (key != null && key > 0) {
               await updateLeaveApprovalStatus(
@@ -793,7 +829,8 @@ class LeaveService {
   /// Returns Table4 containing Leaves (For The Month) matching web portal
   Future<List<Map<String, dynamic>>> fetchDashboardLeaves({String? date}) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'HRMDemo';
+      final accessPoint = await _getValidAccessPoint();
+      if (accessPoint == null) return [];
       final url = AppUrls.getGeneralDashboardUrl(
         accessPoint: accessPoint,
         monthCode: date,
@@ -828,8 +865,8 @@ class LeaveService {
     String? endDate,
   }) async {
     try {
-      final accessPoint =
-          await LocalStorageService.getAccessPoint() ?? 'HRMDEMO';
+      final accessPoint = await _getValidAccessPoint();
+      if (accessPoint == null) return [];
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
       const branchId = 1;
@@ -879,8 +916,8 @@ class LeaveService {
     Map<String, dynamic>? itemData,
   }) async {
     try {
-      final accessPoint =
-          await LocalStorageService.getAccessPoint() ?? 'HRMDEMO';
+      final accessPoint = await _getValidAccessPoint();
+      if (accessPoint == null) return false;
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
 

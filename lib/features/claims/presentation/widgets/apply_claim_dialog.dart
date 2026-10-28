@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../auth/data/models/user_rights_model.dart';
+import '../../../auth/data/services/user_rights_service.dart';
 import '../../data/models/claim_models.dart';
 import '../../data/services/claim_service.dart';
 
@@ -13,6 +15,7 @@ class ApplyClaimDialog extends StatefulWidget {
 
 class _ApplyClaimDialogState extends State<ApplyClaimDialog> {
   final _claimService = ClaimService();
+  final _userRightsService = UserRightsService();
   final _remarksController = TextEditingController();
   final _rateController = TextEditingController();
   final _qtyController = TextEditingController(text: '1');
@@ -23,6 +26,7 @@ class _ApplyClaimDialogState extends State<ApplyClaimDialog> {
 
   List<ClaimMasterItem> _categories = [];
   ClaimMasterItem? _selectedCategory;
+  UserRightsModel? _userRights;
 
   final List<ClaimTailItem> _tailItems = [];
   bool _isLoadingCategories = true;
@@ -34,6 +38,18 @@ class _ApplyClaimDialogState extends State<ApplyClaimDialog> {
   void initState() {
     super.initState();
     _loadCategories();
+    _loadUserRights();
+  }
+
+  Future<void> _loadUserRights() async {
+    try {
+      final rights = await _userRightsService.fetchUserRights(menuCode: 15);
+      if (mounted) {
+        setState(() {
+          _userRights = rights;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -170,11 +186,20 @@ class _ApplyClaimDialogState extends State<ApplyClaimDialog> {
         ? _remarksController.text.trim()
         : 'Expense claim application';
 
-    final success = await _claimService.saveClaimForm(
+    final isApproverLevel3 = _userRights?.transactions == 3;
+
+    debugPrint('====================================================');
+    debugPrint('📝 [ApplyClaimDialog] User tapped Submit Claim:');
+    debugPrint('   Date: $claimDateStr, Total: ₹$_totalClaimAmount, Remarks: $remarks');
+    debugPrint('   Approver Level 3 (Manager): $isApproverLevel3');
+    debugPrint('   Tail Items Count: ${_tailItems.length}');
+
+    final result = await _claimService.saveClaimFormWithResult(
       claimDate: claimDateStr,
       remarks: remarks,
       totalAmount: _totalClaimAmount,
       tailItems: _tailItems,
+      approvalStatus: isApproverLevel3 ? 'A' : 'N',
     );
 
     if (mounted) {
@@ -182,19 +207,27 @@ class _ApplyClaimDialogState extends State<ApplyClaimDialog> {
         _isSubmitting = false;
       });
 
-      if (success) {
+      if (result.success) {
         Navigator.pop(context, true);
+        final isApprover = result.approvalStatus == 'A' || _userRights?.transactions == 3;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Claim Application submitted successfully!'),
+          SnackBar(
+            content: Text(
+              isApprover
+                  ? 'Claim Application approved successfully!'
+                  : 'Claim Application submitted successfully!',
+            ),
             backgroundColor: Colors.green,
           ),
         );
       } else {
+        final errorMsg = result.errorMessage ?? 'Failed to submit claim. Please try again.';
+        debugPrint('❌ [ApplyClaimDialog] Showing Error SnackBar: $errorMsg');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to submit claim. Please try again.'),
+          SnackBar(
+            content: Text(errorMsg),
             backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 4),
           ),
         );
       }

@@ -598,11 +598,16 @@ class _LeavePageState extends State<LeavePage> {
                                   ),
                                 );
 
+                                final isApproverLevel3 =
+                                    _userRights?.transactions == 3;
                                 final success = await _leaveService
                                     .saveLeaveCancellation(
                                       lvApplicationId: summaryItem.key
                                           .toString(),
                                       remarks: 'Cancel leave request',
+                                      approvalStatus: isApproverLevel3
+                                          ? 'A'
+                                          : 'N',
                                     );
 
                                 if (mounted) {
