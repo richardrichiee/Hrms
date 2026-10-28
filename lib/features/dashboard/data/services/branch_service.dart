@@ -13,8 +13,11 @@ class BranchService {
 
   Future<List<BranchModel>> fetchBranches() async {
     try {
-      final accessPoint =
-          await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) {
+        final cached = await LocalStorageService.getBranches();
+        return cached;
+      }
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
 
@@ -35,15 +38,14 @@ class BranchService {
           final serverBranches = list
               .map((item) => BranchModel.fromJson(item as Map<String, dynamic>))
               .toList();
-          if (serverBranches.isNotEmpty) {
-            await LocalStorageService.saveBranches(serverBranches);
-            return serverBranches;
-          }
+          // Always synchronize local cache with server (even if empty)
+          await LocalStorageService.saveBranches(serverBranches);
+          return serverBranches;
         }
       }
     } catch (_) {}
 
-    // Fallback to locally cached branches first before default
+    // Fallback to locally cached branches ONLY if network request failed
     try {
       final cached = await LocalStorageService.getBranches();
       if (cached.isNotEmpty) {
@@ -51,7 +53,7 @@ class BranchService {
       }
     } catch (_) {}
 
-    return [BranchModel(value: 1, name: 'Head Office')];
+    return [];
   }
 
   Future<bool> saveBranchLocation({
@@ -61,8 +63,8 @@ class BranchService {
     required double radius,
   }) async {
     try {
-      final accessPoint =
-          await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) return false;
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
 

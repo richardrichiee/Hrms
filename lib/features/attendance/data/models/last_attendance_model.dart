@@ -2,11 +2,15 @@ class LastAttendanceModel {
   final String inOutTime;
   final int timeFlag; // 0 = Check In, 1 = Check Out
   final String? reason;
+  final double? latitude;
+  final double? longitude;
 
   LastAttendanceModel({
     required this.inOutTime,
     required this.timeFlag,
     this.reason,
+    this.latitude,
+    this.longitude,
   });
 
   bool get isCheckedIn => timeFlag == 0;
@@ -37,6 +41,8 @@ class LastAttendanceModel {
       inOutTime: json['InOutTime']?.toString().trim() ?? '',
       timeFlag: int.tryParse(json['TimeFlag']?.toString() ?? '0') ?? 0,
       reason: json['Reason']?.toString(),
+      latitude: double.tryParse(json['Latitude']?.toString() ?? ''),
+      longitude: double.tryParse(json['Longitude']?.toString() ?? ''),
     );
   }
 
@@ -45,6 +51,8 @@ class LastAttendanceModel {
       'InOutTime': inOutTime,
       'TimeFlag': timeFlag,
       'Reason': reason,
+      'Latitude': latitude,
+      'Longitude': longitude,
     };
   }
 }

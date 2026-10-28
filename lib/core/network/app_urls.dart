@@ -126,19 +126,24 @@ class AppUrls {
   }
 
   /// Endpoint: POST /api/HRM/General/v1/Inbox/{accessPoint}/{timeStamp}
-  static String getInboxUrl({
-    required String accessPoint,
-  }) {
+  static String getInboxUrl({required String accessPoint}) {
     final time = timestamp;
     return '${baseUrl}api/HRM/General/v1/Inbox/$accessPoint/$time';
   }
 
   /// Endpoint: POST /api/HRM/General/v1/InboxDetails/{accessPoint}/{timeStamp}
-  static String getInboxDetailsUrl({
+  static String getInboxDetailsUrl({required String accessPoint}) {
+    final time = timestamp;
+    return '${baseUrl}api/HRM/General/v1/InboxDetails/$accessPoint/$time';
+  }
+
+  /// Endpoint: GET /api/HRM/LeaveCancellation/v1/Get/{id}/{timeStamp}/{accessPoint}
+  static String getLeaveCancellationDetailsUrl({
+    required int key,
     required String accessPoint,
   }) {
     final time = timestamp;
-    return '${baseUrl}api/HRM/General/v1/InboxDetails/$accessPoint/$time';
+    return '${baseUrl}api/HRM/LeaveCancellation/v1/Get/$key/$time/$accessPoint';
   }
 
   /// Endpoint: POST /api/HRM/LeaveCancellation/v1/Save/{id}/{userId}/{timeStamp}/{accessPoint}
@@ -152,9 +157,7 @@ class AppUrls {
   }
 
   /// Endpoint: GET /api/HRM/ClaimForm/v1/List/{timeStamp}/{accessPoint}
-  static String getClaimListUrl({
-    required String accessPoint,
-  }) {
+  static String getClaimListUrl({required String accessPoint}) {
     final time = timestamp;
     return '${baseUrl}api/HRM/ClaimForm/v1/List/$time/$accessPoint';
   }
@@ -179,9 +182,7 @@ class AppUrls {
   }
 
   /// Endpoint: POST /api/HRM/ClaimForm/v1/GetRate/{timeStamp}/{accessPoint}
-  static String getClaimRateUrl({
-    required String accessPoint,
-  }) {
+  static String getClaimRateUrl({required String accessPoint}) {
     final time = timestamp;
     return '${baseUrl}api/HRM/ClaimForm/v1/GetRate/$time/$accessPoint';
   }
@@ -196,41 +197,31 @@ class AppUrls {
   }
 
   /// Endpoint: GET /api/HRM/General/v1/RetrieveDataTable_GeneralDetails/{accessPoint}/{timeStamp}?iD=0&param=ClaimMaster
-  static String getClaimMasterUrl({
-    required String accessPoint,
-  }) {
+  static String getClaimMasterUrl({required String accessPoint}) {
     final time = timestamp;
     return '${baseUrl}api/HRM/General/v1/RetrieveDataTable_GeneralDetails/$accessPoint/$time?iD=0&param=ClaimMaster';
   }
 
   /// Endpoint: POST /api/HRM/LeaveApplication/v1/EmpSearch/{timeStamp}/{accessPoint}
-  static String getLeaveEmpSearchUrl({
-    required String accessPoint,
-  }) {
+  static String getLeaveEmpSearchUrl({required String accessPoint}) {
     final time = timestamp;
     return '${baseUrl}api/HRM/LeaveApplication/v1/EmpSearch/$time/$accessPoint';
   }
 
   /// Endpoint: POST /api/HRM/LeaveApplication/v1/Approve_Or_Forward/{timeStamp}/{accessPoint}
-  static String getLeaveApproveOrForwardUrl({
-    required String accessPoint,
-  }) {
+  static String getLeaveApproveOrForwardUrl({required String accessPoint}) {
     final time = timestamp;
     return '${baseUrl}api/HRM/LeaveApplication/v1/Approve_Or_Forward/$time/$accessPoint';
   }
 
   /// Endpoint: POST /api/HRM/ClaimForm/v1/EmpSearch/{timeStamp}/{accessPoint}
-  static String getClaimEmpSearchUrl({
-    required String accessPoint,
-  }) {
+  static String getClaimEmpSearchUrl({required String accessPoint}) {
     final time = timestamp;
     return '${baseUrl}api/HRM/ClaimForm/v1/EmpSearch/$time/$accessPoint';
   }
 
   /// Endpoint: POST /api/HRM/ClaimForm/v1/Approve_Or_Forward/{timeStamp}/{accessPoint}
-  static String getClaimApproveOrForwardUrl({
-    required String accessPoint,
-  }) {
+  static String getClaimApproveOrForwardUrl({required String accessPoint}) {
     final time = timestamp;
     return '${baseUrl}api/HRM/ClaimForm/v1/Approve_Or_Forward/$time/$accessPoint';
   }
@@ -308,5 +299,3 @@ class AppUrls {
     return '${baseUrl}api/HRM/ChangePassWord/v1/Details/$id/$time/$accessPoint';
   }
 }
-
-

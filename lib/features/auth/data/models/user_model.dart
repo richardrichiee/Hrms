@@ -3,17 +3,23 @@ class UserModel {
   final int userId;
   final String userName;
   final int employeeId;
+  final String empCode;
   final String serverDate;
   final int roleId;
+  final int onlinePunchAnywhere;
   final String? errorMessage;
+
+  bool get canPunchAnywhere => onlinePunchAnywhere == 1;
 
   UserModel({
     required this.company,
     required this.userId,
     required this.userName,
     required this.employeeId,
+    this.empCode = '',
     required this.serverDate,
     required this.roleId,
+    this.onlinePunchAnywhere = 0,
     this.errorMessage,
   });
 
@@ -35,9 +41,22 @@ class UserModel {
               json['EmpId']?.toString() ??
               '0') ??
           0,
+      empCode: json['EmpCode']?.toString() ??
+          json['EmployeeCode']?.toString() ??
+          json['Empcode']?.toString() ??
+          json['EmpNo']?.toString() ??
+          json['EmployeeNo']?.toString() ??
+          json['empCode']?.toString() ??
+          json['emp_code']?.toString() ??
+          '',
       serverDate: json['ServerDate']?.toString() ?? '',
       roleId: int.tryParse(json['RoleID']?.toString() ??
               json['RoleId']?.toString() ??
+              '0') ??
+          0,
+      onlinePunchAnywhere: int.tryParse(json['OnlinePunchAnywhere']?.toString() ??
+              json['onlinePunchAnywhere']?.toString() ??
+              json['PunchAnywhere']?.toString() ??
               '0') ??
           0,
       errorMessage: json['ErrorMessage'] as String?,
@@ -50,8 +69,10 @@ class UserModel {
       'UserID': userId,
       'UserName': userName,
       'EmployeeID': employeeId,
+      'EmpCode': empCode,
       'ServerDate': serverDate,
       'RoleID': roleId,
+      'OnlinePunchAnywhere': onlinePunchAnywhere,
       'ErrorMessage': errorMessage,
     };
   }

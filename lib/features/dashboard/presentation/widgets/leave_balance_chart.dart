@@ -43,32 +43,10 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
   }
 
   List<LeaveSummaryItem> get _data {
-    if (widget.items != null && widget.items!.isNotEmpty) {
+    if (widget.items != null) {
       return widget.items!;
     }
-    return [
-      LeaveSummaryItem(
-        leaveName: 'Privilege',
-        totalLeaves: 10,
-        employeesTaken: 2.5,
-        balanceLeaves: 7.5,
-        color: const Color(0xFF2563EB),
-      ),
-      LeaveSummaryItem(
-        leaveName: 'Casual',
-        totalLeaves: 6,
-        employeesTaken: 2.0,
-        balanceLeaves: 4.0,
-        color: const Color(0xFF006C49),
-      ),
-      LeaveSummaryItem(
-        leaveName: 'Sick',
-        totalLeaves: 5,
-        employeesTaken: 2.0,
-        balanceLeaves: 3.0,
-        color: const Color(0xFF3E3FCC),
-      ),
-    ];
+    return [];
   }
 
   @override
@@ -98,32 +76,18 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Header with Title, Subtitle, and Segmented Toggle
+          // 1. Header with Title and Segmented Toggle
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Leave Balance',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Total remaining: ${_formatNum(totalBalance)} days',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
+              const Text(
+                'Leave Balance',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
               // Segmented Toggle Pill [Chart | Table]
               Container(
@@ -217,15 +181,8 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
 
           // 3. Action Footer
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              const Text(
-                'Next cycle accrual: Nov 1',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textMuted,
-                ),
-              ),
               InkWell(
                 onTap: () => context.push('/leave'),
                 borderRadius: BorderRadius.circular(8),
@@ -277,17 +234,17 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Donut Chart with Centered Days Left
+        // Donut Chart with Centered Total Days
         SizedBox(
-          width: 120,
-          height: 120,
+          width: 104,
+          height: 104,
           child: Stack(
             alignment: Alignment.center,
             children: [
               PieChart(
                 PieChartData(
-                  sectionsSpace: 3,
-                  centerSpaceRadius: 38,
+                  sectionsSpace: 2.5,
+                  centerSpaceRadius: 33,
                   startDegreeOffset: -90,
                   sections: data.map((item) {
                     final val = item.balanceLeaves > 0 ? item.balanceLeaves : 0.1;
@@ -295,7 +252,7 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
                       color: item.color,
                       value: val,
                       showTitle: false,
-                      radius: 14,
+                      radius: 12,
                     );
                   }).toList(),
                 ),
@@ -306,19 +263,21 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
                   Text(
                     _formatNum(totalBalance),
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
                       letterSpacing: -0.5,
+                      height: 1.1,
                     ),
                   ),
+                  const SizedBox(height: 1),
                   const Text(
-                    'DAYS LEFT',
+                    'Days',
                     style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.textMuted,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.2,
                     ),
                   ),
                 ],
@@ -326,9 +285,9 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
             ],
           ),
         ),
-        const SizedBox(width: 24),
+        const SizedBox(width: 16),
 
-        // Legend Breakdown List
+        // Legend Breakdown List (Fully Responsive)
         Expanded(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -336,33 +295,33 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: item.color,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          item.leaveName,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ],
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: item.color,
+                        shape: BoxShape.circle,
+                      ),
                     ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        item.leaveName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Text(
                       '${_formatNum(item.balanceLeaves)} d',
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
                       ),
@@ -378,6 +337,21 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
   }
 
   Widget _buildTableView(List<LeaveSummaryItem> data) {
+    if (data.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        alignment: Alignment.center,
+        child: const Text(
+          'No leave balances recorded',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textMuted,
+          ),
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),

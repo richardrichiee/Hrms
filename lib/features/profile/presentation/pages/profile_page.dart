@@ -208,14 +208,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   children: [
                     // 1. Top Profile Hero Card matching Dashboard/Drawer
                     _buildProfileHeroCard(empCode),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
 
-                    // 2. Metrics Stats Row (Attendance, Leaves, Claims)
-                    _buildMetricsRow(),
-                    const SizedBox(height: 22),
-
-                    // 3. Work & Employment
-                    _buildSectionHeader('WORK & EMPLOYMENT'),
+                    // 2. Company Profile
+                    _buildSectionHeader('COMPANY PROFILE'),
                     const SizedBox(height: 8),
                     _ProfileGroupCard(
                       children: [
@@ -421,128 +417,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildMetricsRow() {
-    final attendance = _employeeDetails?.attendanceForTheMonth ?? 0;
-    final leaves = _employeeDetails?.noOfLeavesForTheMonth ?? 0;
-    final claims = _employeeDetails?.thisPendingMonthClaimAmount ?? 0.0;
-
-    return Row(
-      children: [
-        Expanded(
-          child: _buildMetricTile(
-            title: '$attendance',
-            unit: 'Days',
-            subtitle: 'Attendance',
-            icon: Icons.event_available_rounded,
-            iconColor: const Color(0xFF059669),
-            iconBg: const Color(0xFFECFDF5),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _buildMetricTile(
-            title: '$leaves',
-            unit: 'Days',
-            subtitle: 'Leaves',
-            icon: Icons.flight_takeoff_rounded,
-            iconColor: const Color(0xFFD97706),
-            iconBg: const Color(0xFFFEF3C7),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _buildMetricTile(
-            title: claims > 0 ? '₹${claims.toInt()}' : '₹0',
-            unit: '',
-            subtitle: 'Claims',
-            icon: Icons.receipt_long_rounded,
-            iconColor: const Color(0xFF7C3AED),
-            iconBg: const Color(0xFFEDE9FE),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetricTile({
-    required String title,
-    required String unit,
-    required String subtitle,
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBg,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: iconColor, size: 16),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Flexible(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-              ),
-              if (unit.isNotEmpty) ...[
-                const SizedBox(width: 3),
-                Text(
-                  unit,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF94A3B8),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 1),
-          Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
 
   Widget _buildSignOutTile(BuildContext context) {

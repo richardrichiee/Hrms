@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../core/constants/app_constants.dart';
 import '../../data/services/access_point_service.dart';
 
 class CompanyAccessPage extends StatefulWidget {
@@ -67,6 +68,7 @@ class _CompanyAccessPageState extends State<CompanyAccessPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -75,39 +77,25 @@ class _CompanyAccessPageState extends State<CompanyAccessPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // App Logo / Title Header
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.business_rounded,
-                    size: 60,
-                    color: AppColors.primary,
+                // App Logo (Clean, borderless, blended to UI like splash screen)
+                Center(
+                  child: Image.asset(
+                    'assets/images/ally_one_dream_team.png',
+                    height: 56,
+                    fit: BoxFit.contain,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 const Text(
-                  'Dream Team HRMS',
+                  AppConstants.appName,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 26,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Enter your company access code to connect to your HR portal.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 36),
+                const SizedBox(height: 32),
 
                 // Access ID Input Field
                 TextField(
@@ -180,7 +168,7 @@ class _CompanyAccessPageState extends State<CompanyAccessPage> {
                           ),
                         )
                       : const Text(
-                          'Connect Access Point',
+                          'Submit',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                 ),

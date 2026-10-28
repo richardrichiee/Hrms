@@ -13,12 +13,6 @@ class DashboardMetrics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Calculate realistic attendance rate for the current month so far
-    final today = DateTime.now().day;
-    final rate = today > 0
-        ? ((attendanceCount / today) * 100).clamp(0, 100).toStringAsFixed(1)
-        : '100.0';
-
     final leavesFormatted = (leavesTakenCount % 1 == 0)
         ? leavesTakenCount.toInt().toString()
         : leavesTakenCount.toStringAsFixed(1);
@@ -52,47 +46,18 @@ class DashboardMetrics extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.calendar_today_rounded,
-                          color: AppColors.primary,
-                          size: 20,
-                        ),
-                      ),
-                      Flexible(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondaryContainer.withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              '$rate%',
-                              maxLines: 1,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.secondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.calendar_today_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   Column(

@@ -13,7 +13,8 @@ class FinancialYearService {
 
   Future<List<FinancialYearModel>> fetchFinancialYears() async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) return [];
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
 
@@ -38,18 +39,9 @@ class FinancialYearService {
               .toList();
         }
       }
-      return [
-        FinancialYearModel(value: 3, name: '2025-26'),
-        FinancialYearModel(value: 1, name: '2024-25'),
-        FinancialYearModel(value: 2, name: '2023-24'),
-      ];
+      return [];
     } catch (e) {
-      // Fallback list if network request fails
-      return [
-        FinancialYearModel(value: 3, name: '2025-26'),
-        FinancialYearModel(value: 1, name: '2024-25'),
-        FinancialYearModel(value: 2, name: '2023-24'),
-      ];
+      return [];
     }
   }
 }

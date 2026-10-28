@@ -482,58 +482,7 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Locked notice card
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF0FDF4),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFBBF7D0)),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFDCFCE7),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.verified_user_rounded,
-                  color: Color(0xFF059669),
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Branch Location Configured',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF166534),
-                      ),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'GPS coordinates are configured for this branch. For attendance security and accuracy, coordinates are locked in the mobile app.',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        height: 1.4,
-                        color: Color(0xFF15803D),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
+
 
         // Coordinates Display Grid
         Row(

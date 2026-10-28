@@ -13,7 +13,8 @@ class EmployeeService {
 
   Future<EmployeeDetailsModel?> fetchEmployeeDashboard({String? date}) async {
     try {
-      final accessPoint = await LocalStorageService.getAccessPoint() ?? 'hrmdemo';
+      final accessPoint = await LocalStorageService.getAccessPoint();
+      if (accessPoint == null || accessPoint.isEmpty) return null;
       final user = await LocalStorageService.getUser();
       final employeeId = user?.employeeId ?? 1;
 
@@ -45,23 +46,9 @@ class EmployeeService {
         }
       }
 
-      // Fallback model based on logged-in user if backend table is empty
-      return EmployeeDetailsModel(
-        empId: employeeId,
-        empCode: employeeId.toString(),
-        name: user?.userName ?? '',
-        designation: '',
-        contactAddress: '',
-      );
+      return null;
     } catch (e) {
-      final user = await LocalStorageService.getUser();
-      return EmployeeDetailsModel(
-        empId: user?.employeeId ?? 1,
-        empCode: user?.employeeId.toString() ?? '',
-        name: user?.userName ?? '',
-        designation: '',
-        contactAddress: '',
-      );
+      return null;
     }
   }
 }

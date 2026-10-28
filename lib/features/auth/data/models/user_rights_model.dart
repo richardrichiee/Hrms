@@ -35,6 +35,20 @@ class UserRightsModel {
     );
   }
 
+  factory UserRightsModel.noAccess() {
+    return UserRightsModel(
+      addRight: false,
+      modiRight: false,
+      delRight: false,
+      viewRight: false,
+      transactions: 0,
+      hierarchyId: 0,
+      userCode: 0,
+      tempSave: 0,
+      heirarchyNeeded: 0,
+    );
+  }
+
   factory UserRightsModel.fullAccess() {
     return UserRightsModel(
       addRight: true,

@@ -176,3 +176,18 @@ class ClaimModel {
     );
   }
 }
+
+class ClaimSaveResult {
+  final bool success;
+  final String? errorMessage;
+  final String? approvalStatus;
+  final int? statusCode;
+
+  ClaimSaveResult({
+    required this.success,
+    this.errorMessage,
+    this.approvalStatus,
+    this.statusCode,
+  });
+}
+

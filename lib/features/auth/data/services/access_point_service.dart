@@ -30,7 +30,8 @@ class AccessPointService {
       if (cachedUrl != null && cachedUrl.isNotEmpty) {
         return cachedUrl;
       }
-      final accessId = await LocalStorageService.getAccessId() ?? 'abcd';
+      final accessId = await LocalStorageService.getAccessId();
+      if (accessId == null || accessId.isEmpty) return null;
       final res = await fetchAccessPoint(accessId);
       return res.companyImageUrl;
     } catch (_) {
@@ -43,9 +44,7 @@ class AccessPointService {
       final url = AppUrls.getAccessPointUrl(accessId);
       final response = await _dio.get(
         url,
-        options: Options(
-          headers: {'Accept': 'application/json'},
-        ),
+        options: Options(headers: {'Accept': 'application/json'}),
       );
 
       if (response.statusCode == 200 && response.data != null) {
@@ -58,6 +57,11 @@ class AccessPointService {
           final companyImageUrl = firstItem['CompanyImageUrl'] as String?;
 
           if (accessPoint != null && accessPoint.isNotEmpty) {
+            final oldAccessPoint = await LocalStorageService.getAccessPoint();
+            if (oldAccessPoint != null &&
+                oldAccessPoint.toLowerCase() != accessPoint.toLowerCase()) {
+              await LocalStorageService.clearUserSession();
+            }
             // Save to secure local storage
             await LocalStorageService.saveAccessPoint(accessPoint);
             await LocalStorageService.saveAccessId(accessId);
@@ -74,11 +78,6 @@ class AccessPointService {
         }
 
         if (data['error'] != null && data['error']['message'] != null) {
-          if (accessId.toLowerCase() == 'hrmdemo' || accessId == '123456789') {
-            await LocalStorageService.saveAccessPoint('HRMDemo');
-            await LocalStorageService.saveAccessId(accessId);
-            return AccessPointResult(isSuccess: true, accessPoint: 'HRMDemo');
-          }
           return AccessPointResult(
             isSuccess: false,
             errorMessage: data['error']['message'].toString(),
@@ -86,25 +85,15 @@ class AccessPointService {
         }
       }
 
-      if (accessId.toLowerCase() == 'hrmdemo' || accessId == '123456789') {
-        await LocalStorageService.saveAccessPoint('HRMDemo');
-        await LocalStorageService.saveAccessId(accessId);
-        return AccessPointResult(isSuccess: true, accessPoint: 'HRMDemo');
-      }
-
       return AccessPointResult(
         isSuccess: false,
         errorMessage: 'Invalid Access ID or company not found.',
       );
     } catch (e) {
-      if (accessId.toLowerCase() == 'hrmdemo' || accessId == '123456789') {
-        await LocalStorageService.saveAccessPoint('HRMDemo');
-        await LocalStorageService.saveAccessId(accessId);
-        return AccessPointResult(isSuccess: true, accessPoint: 'HRMDemo');
-      }
       return AccessPointResult(
         isSuccess: false,
-        errorMessage: 'Unable to connect to server. Please check your internet connection.',
+        errorMessage:
+            'Unable to connect to server. Please check your internet connection.',
       );
     }
   }

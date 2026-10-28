@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../profile/data/models/employee_details_model.dart';
 import '../../../profile/data/services/employee_service.dart';
-import 'leave_type_details_page.dart';
+import '../widgets/apply_leave_dialog.dart';
 
 class ApplyLeavePage extends StatefulWidget {
   const ApplyLeavePage({super.key});
@@ -32,40 +32,23 @@ class _ApplyLeavePageState extends State<ApplyLeavePage> {
     }
   }
 
-  String _formatBalance(int leaveId) {
-    if (_isLoading) return 'Loading...';
-    if (_leaveBalances == null || _leaveBalances!.isEmpty) return '0 Days';
-    final match = _leaveBalances!.firstWhere(
-      (b) => b.leaveId == leaveId,
-      orElse: () => LeaveBalanceItem(leaveId: 0, leaveName: '', closing: 0.0),
-    );
-    final val = match.closing;
-    if (val % 1 == 0) {
-      return '${val.toInt()} ${val == 1 ? "Day" : "Days"}';
-    }
-    return '$val Days';
-  }
 
-  void _navigateToLeaveType({
+  void _openApplyLeaveModal({
     required String leaveId,
     required String leaveName,
-    required IconData icon,
-    required Color color,
-    required String description,
   }) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => LeaveTypeDetailsPage(
-          leaveId: leaveId,
-          leaveName: leaveName,
-          icon: icon,
-          color: color,
-          description: description,
-        ),
+    showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ApplyLeaveDialog(
+        initialLeaveId: leaveId,
+        initialLeaveName: leaveName,
       ),
-    ).then((_) {
-      _loadBalances();
+    ).then((result) {
+      if (result == true) {
+        _loadBalances();
+      }
     });
   }
 
@@ -91,7 +74,7 @@ class _ApplyLeavePageState extends State<ApplyLeavePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Select Leave Category',
+                'Select Leave',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -100,69 +83,91 @@ class _ApplyLeavePageState extends State<ApplyLeavePage> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Choose a category to view your taken leaves and apply for new requests',
+                'Choose a leave type to apply',
                 style: TextStyle(fontSize: 13, color: AppColors.textMuted),
               ),
               const SizedBox(height: 20),
 
-              // Casual Leave Card
-              _LeaveCategoryCard(
-                title: 'Casual Leave',
-                balanceText: _formatBalance(1),
-                icon: Icons.flight_takeoff_rounded,
-                color: const Color(0xFF1E88E5),
-                onTap: () => _navigateToLeaveType(
-                  leaveId: '1',
-                  leaveName: 'Casual Leave',
-                  icon: Icons.flight_takeoff_rounded,
-                  color: const Color(0xFF1E88E5),
-                  description:
-                      'Casual leave is provided for unexpected events, urgent personal matters, or brief planned time off.',
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              // Sick Leave Card
-              _LeaveCategoryCard(
-                title: 'Sick Leave',
-                balanceText: _formatBalance(2),
-                icon: Icons.local_hospital_outlined,
-                color: const Color(0xFF0D9488),
-                onTap: () => _navigateToLeaveType(
-                  leaveId: '2',
-                  leaveName: 'Sick Leave',
-                  icon: Icons.local_hospital_outlined,
-                  color: const Color(0xFF0D9488),
-                  description:
-                      'Sick leave is dedicated to medical recovery, illness, consultations, and personal health needs.',
-                ),
-              ),
-
-              // Extra dynamic categories if present in balance response
-              if (_leaveBalances != null)
-                ..._leaveBalances!
-                    .where((b) =>
-                        b.leaveId != 1 &&
-                        b.leaveId != 2 &&
-                        b.leaveName.trim().isNotEmpty)
-                    .map((b) => Padding(
-                          padding: const EdgeInsets.only(top: 14),
-                          child: _LeaveCategoryCard(
-                            title: b.leaveName,
-                            balanceText:
-                                '${(b.closing % 1 == 0) ? b.closing.toInt() : b.closing} ${(b.closing == 1) ? "Day" : "Days"}',
-                            icon: Icons.calendar_month_outlined,
-                            color: const Color(0xFF7C3AED),
-                            onTap: () => _navigateToLeaveType(
-                              leaveId: b.leaveId.toString(),
-                              leaveName: b.leaveName,
-                              icon: Icons.calendar_month_outlined,
-                              color: const Color(0xFF7C3AED),
-                              description:
-                                  '${b.leaveName} allocation for employees.',
-                            ),
+              if (_isLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else if (_leaveBalances == null || _leaveBalances!.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.event_busy_rounded,
+                          size: 52,
+                          color: AppColors.textMuted.withValues(alpha: 0.5),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'No Leave Categories Available',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
                           ),
-                        )),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'No active leave balances were found for your profile.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ..._leaveBalances!.map((b) {
+                  final nameLower = b.leaveName.toLowerCase();
+                  final isSick = nameLower.contains('sick');
+                  final isCasual = nameLower.contains('casual');
+                  final icon = isSick
+                      ? Icons.local_hospital_outlined
+                      : (isCasual
+                          ? Icons.flight_takeoff_rounded
+                          : Icons.calendar_month_outlined);
+                  final color = isSick
+                      ? const Color(0xFF0D9488)
+                      : (isCasual
+                          ? const Color(0xFF1E88E5)
+                          : const Color(0xFF7C3AED));
+
+                  final val = b.closing < 0 ? 0.0 : b.closing;
+                  final balanceText = (val % 1 == 0)
+                      ? '${val.toInt()} ${val == 1 ? "Day" : "Days"}'
+                      : '$val Days';
+
+                  final formattedTitle = b.leaveName.split(' ').map((word) {
+                    if (word.isEmpty) return word;
+                    return word[0].toUpperCase() + word.substring(1).toLowerCase();
+                  }).join(' ');
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: _LeaveCategoryCard(
+                      title: formattedTitle,
+                      balanceText: balanceText,
+                      icon: icon,
+                      color: color,
+                      onTap: () => _openApplyLeaveModal(
+                        leaveId: b.leaveId.toString(),
+                        leaveName: formattedTitle,
+                      ),
+                    ),
+                  );
+                }),
             ],
           ),
         ),

@@ -7,8 +7,13 @@ import '../../data/services/leave_service.dart';
 
 class ApplyLeaveDialog extends StatefulWidget {
   final String? initialLeaveId;
+  final String? initialLeaveName;
 
-  const ApplyLeaveDialog({super.key, this.initialLeaveId});
+  const ApplyLeaveDialog({
+    super.key,
+    this.initialLeaveId,
+    this.initialLeaveName,
+  });
 
   @override
   State<ApplyLeaveDialog> createState() => _ApplyLeaveDialogState();
@@ -29,11 +34,18 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
   double _calculatedDays = 1.0;
   bool _isCalculating = false;
   bool _isSubmitting = false;
+  String? _errorMessage;
+  String? _calculationError;
 
   @override
   void initState() {
     super.initState();
     _selectedLeaveId = widget.initialLeaveId ?? '1';
+    _reasonController.addListener(() {
+      if (_errorMessage != null && mounted) {
+        setState(() => _errorMessage = null);
+      }
+    });
     _loadUserRights();
     _triggerCalculation();
   }
@@ -58,23 +70,40 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
   Future<void> _triggerCalculation() async {
     setState(() {
       _isCalculating = true;
+      _calculationError = null;
+      _errorMessage = null;
     });
 
     final fromStr = DateFormat('yyyy-MM-dd').format(_fromDate);
     final toStr = DateFormat('yyyy-MM-dd').format(_toDate);
 
-    final days = await _leaveService.calculateLeaveDays(
+    debugPrint('🔄 [ApplyLeaveDialog] Triggering Calculation: leaveId=$_selectedLeaveId, leaveType=$_selectedLeaveType, from=$fromStr, to=$toStr');
+
+    final result = await _leaveService.calculateLeaveDaysWithValidation(
       leaveId: _selectedLeaveId,
       leaveType: _selectedLeaveType,
       fromDate: fromStr,
       toDate: toStr,
     );
 
+    debugPrint('📊 [ApplyLeaveDialog] Calculation result: days=${result.days}, error=${result.errorMessage}');
+
     if (mounted) {
+      final hasError = result.errorMessage != null && result.errorMessage!.trim().isNotEmpty;
+      final errorText = hasError ? result.errorMessage!.trim() : null;
+
       setState(() {
-        _calculatedDays = days;
+        _calculatedDays = result.days;
+        _calculationError = errorText;
         _isCalculating = false;
       });
+
+      if (errorText != null && errorText.isNotEmpty) {
+        _showWarningDialog(
+          title: 'warning',
+          message: errorText,
+        );
+      }
     }
   }
 
@@ -88,6 +117,8 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
 
     if (picked != null) {
       setState(() {
+        _errorMessage = null;
+        _calculationError = null;
         if (isFromDate) {
           _fromDate = picked;
           if (_toDate.isBefore(_fromDate)) {
@@ -102,19 +133,49 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
   }
 
   Future<void> _submitLeaveApplication() async {
-    final reason = _reasonController.text.trim();
-    if (reason.isEmpty) {
+    if (_isCalculating) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a reason for your leave.'),
-          backgroundColor: AppColors.error,
+          content: Text('Calculating leave days, please wait...'),
+          duration: Duration(seconds: 1),
         ),
+      );
+      return;
+    }
+
+    // BLOCK SUBMISSION IF THERE IS A CALCULATION ERROR (matching web portal)
+    if (_calculationError != null && _calculationError!.isNotEmpty) {
+      _showWarningDialog(
+        title: 'warning',
+        message: _calculationError!,
+      );
+      return;
+    }
+
+    if (_calculatedDays <= 0) {
+      _showWarningDialog(
+        title: 'warning',
+        message: _calculationError ?? 'Invalid leave duration. Please check selected dates.',
+      );
+      return;
+    }
+
+    final reason = _reasonController.text.trim();
+    if (reason.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter a reason for your leave.';
+      });
+      _showNoticeDialog(
+        title: 'Reason Required',
+        message: 'Please enter a reason for your leave before submitting.',
+        isError: true,
       );
       return;
     }
 
     setState(() {
       _isSubmitting = true;
+      _errorMessage = null;
     });
 
     final fromStr = DateFormat('yyyy-MM-dd').format(_fromDate);
@@ -122,7 +183,14 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
 
     final isApproverLevel3 = _userRights?.transactions == 3;
 
-    final success = await _leaveService.saveLeaveApplication(
+    debugPrint('🚀 [ApplyLeaveDialog] Submitting Leave Application:');
+    debugPrint('   Leave ID: $_selectedLeaveId');
+    debugPrint('   Leave Type: $_selectedLeaveType');
+    debugPrint('   Dates: $fromStr to $toStr ($_calculatedDays days)');
+    debugPrint('   Reason: $reason');
+    debugPrint('   Approver Level 3: $isApproverLevel3');
+
+    final result = await _leaveService.saveLeaveApplicationWithResult(
       leaveId: _selectedLeaveId,
       leaveType: _selectedLeaveType,
       fromDate: fromStr,
@@ -132,30 +200,199 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
       approvalStatus: isApproverLevel3 ? 'A' : 'N',
     );
 
-    if (mounted) {
+    debugPrint('🏁 [ApplyLeaveDialog] Submission result: success=${result.success}, code=${result.statusCode}');
+    debugPrint('🏁 [ApplyLeaveDialog] Error message: ${result.errorMessage}');
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSubmitting = false;
+    });
+
+    if (result.success) {
+      Navigator.pop(context, true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Leave Application submitted successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      final backendMessage = (result.errorMessage != null &&
+              result.errorMessage!.trim().isNotEmpty &&
+              result.errorMessage!.trim() != '{}' &&
+              result.errorMessage!.trim() != '[]')
+          ? result.errorMessage!.trim()
+          : 'Failed to submit leave application. Please check leave balance or dates.';
+
       setState(() {
-        _isSubmitting = false;
+        _errorMessage = backendMessage;
       });
 
-      if (success) {
-        Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Leave Application submitted successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Failed to submit leave application. Please try again.',
-            ),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+      _showWarningDialog(
+        title: 'warning',
+        message: backendMessage,
+      );
     }
+  }
+
+  void _showWarningDialog({
+    required String title,
+    required String message,
+  }) {
+    showDialog(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogCtx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header bar matching web portal
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF374151),
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => Navigator.pop(dialogCtx),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4.0),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: Color(0xFF9CA3AF),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
+            // Body matching web portal: rounded yellow square border with '!' inside
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: const Color(0xFFF59E0B),
+                        width: 2.5,
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      '!',
+                      style: TextStyle(
+                        color: Color(0xFFF59E0B),
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1F2937),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showNoticeDialog({
+    required String title,
+    required String message,
+    bool isError = true,
+  }) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Row(
+          children: [
+            Icon(
+              isError ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
+              color: isError ? AppColors.error : AppColors.primary,
+              size: 24,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(
+            fontSize: 14,
+            color: AppColors.textSecondary,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isError ? AppColors.error : AppColors.primary,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text(
+                'OK',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -202,9 +439,9 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
               ),
               const Divider(height: 20),
 
-              // Leave Category (Fixed / Locked based on user selection)
+              // Leave (Fixed / Locked based on user selection)
               const Text(
-                'Leave Category',
+                'Leave',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -212,52 +449,65 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
                 ),
               ),
               const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: _selectedLeaveId == '1'
-                      ? const Color(0xFF1E88E5).withValues(alpha: 0.08)
-                      : const Color(0xFF0D9488).withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _selectedLeaveId == '1'
-                        ? const Color(0xFF1E88E5).withValues(alpha: 0.25)
-                        : const Color(0xFF0D9488).withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _selectedLeaveId == '1'
-                          ? Icons.flight_takeoff_rounded
-                          : Icons.local_hospital_outlined,
-                      size: 18,
-                      color: _selectedLeaveId == '1'
+              Builder(
+                builder: (context) {
+                  final String displayName = widget.initialLeaveName ??
+                      (_selectedLeaveId == '1'
+                          ? 'Casual Leave'
+                          : (_selectedLeaveId == '2' ? 'Sick Leave' : 'Leave'));
+                  final isSick = _selectedLeaveId == '2' ||
+                      displayName.toLowerCase().contains('sick');
+                  final isCasual = _selectedLeaveId == '1' ||
+                      displayName.toLowerCase().contains('casual');
+                  final categoryColor = isSick
+                      ? const Color(0xFF0D9488)
+                      : (isCasual
                           ? const Color(0xFF1E88E5)
-                          : const Color(0xFF0D9488),
+                          : const Color(0xFF7C3AED));
+                  final categoryIcon = isSick
+                      ? Icons.local_hospital_outlined
+                      : (isCasual
+                          ? Icons.flight_takeoff_rounded
+                          : Icons.calendar_month_outlined);
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
                     ),
-                    const SizedBox(width: 10),
-                    Text(
-                      _selectedLeaveId == '1' ? 'Casual Leave' : 'Sick Leave',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: _selectedLeaveId == '1'
-                            ? const Color(0xFF1E88E5)
-                            : const Color(0xFF0D9488),
+                    decoration: BoxDecoration(
+                      color: categoryColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: categoryColor.withValues(alpha: 0.25),
                       ),
                     ),
-                  ],
-                ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          categoryIcon,
+                          size: 18,
+                          color: categoryColor,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          displayName,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: categoryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 16),
 
-              // Leave Type Dropdown (Full / Half Day)
+              // Leave Type Dropdown (matching web portal: Full Day and Half Day)
               const Text(
-                'Leave Duration Type',
+                'Leave Type',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -275,18 +525,15 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
                 ),
                 items: const [
                   DropdownMenuItem(value: '1', child: Text('Full Day')),
-                  DropdownMenuItem(
-                    value: '2',
-                    child: Text('Half Day (First Half)'),
-                  ),
-                  DropdownMenuItem(
-                    value: '3',
-                    child: Text('Half Day (Second Half)'),
-                  ),
+                  DropdownMenuItem(value: '2', child: Text('Half Day')),
                 ],
                 onChanged: (val) {
                   if (val != null) {
-                    setState(() => _selectedLeaveType = val);
+                    setState(() {
+                      _errorMessage = null;
+                      _calculationError = null;
+                      _selectedLeaveType = val;
+                    });
                     _triggerCalculation();
                   }
                 },
@@ -388,8 +635,13 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.08),
+                  color: _calculationError != null
+                      ? const Color(0xFFFEF2F2)
+                      : AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
+                  border: _calculationError != null
+                      ? Border.all(color: const Color(0xFFFCA5A5))
+                      : null,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -409,11 +661,13 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
                       )
                     else
                       Text(
-                        '$_calculatedDays Days',
-                        style: const TextStyle(
+                        '${_calculatedDays % 1 == 0 ? _calculatedDays.toInt() : _calculatedDays} Days',
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
+                          color: _calculationError != null
+                              ? const Color(0xFFDC2626)
+                              : AppColors.primary,
                         ),
                       ),
                   ],
@@ -438,14 +692,84 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
               ),
               const SizedBox(height: 18),
 
-              const SizedBox(height: 8),
+              if (_calculationError != null && _calculationError!.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Color(0xFFD97706),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _calculationError!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF92400E),
+                            fontWeight: FontWeight.w600,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              if (_errorMessage != null && _errorMessage!.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        color: Color(0xFFDC2626),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF991B1B),
+                            fontWeight: FontWeight.w500,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
 
               // Submit Action Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
+                    backgroundColor: (_calculationError != null || _calculatedDays <= 0)
+                        ? const Color(0xFF9CA3AF)
+                        : AppColors.primary,
                   ),
                   onPressed: _isSubmitting ? null : _submitLeaveApplication,
                   child: _isSubmitting
@@ -457,9 +781,11 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
                             strokeWidth: 2,
                           ),
                         )
-                      : const Text(
-                          'Submit',
-                          style: TextStyle(
+                      : Text(
+                          (_calculationError != null || _calculatedDays <= 0)
+                              ? 'Blocked: Leave Exceeded'
+                              : 'Submit',
+                          style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,

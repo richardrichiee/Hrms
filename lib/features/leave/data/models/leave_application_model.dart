@@ -23,15 +23,36 @@ class LeaveApplicationModel {
 
   factory LeaveApplicationModel.fromJson(Map<String, dynamic> json) {
     return LeaveApplicationModel(
-      key: json['Key'] ?? 0,
-      employee: json['Employee'] ?? 'Employee',
-      leaveName: json['LeaveName'] ?? json['LeaveName1'] ?? 'Leave',
-      leaveType: json['LeaveType'] ?? 'Full Day',
-      fromDate: json['FromDate'] ?? '',
-      toDate: json['ToDate'] ?? '',
-      noOfLeaves: (json['NoOfLeaves'] as num?)?.toDouble() ?? 1.0,
-      reason: json['Reason'] ?? '',
-      status: json['Status'] ?? '',
+      key: int.tryParse(json['Key']?.toString() ??
+              json['ID']?.toString() ??
+              json['LvApplicationID']?.toString() ??
+              '') ??
+          0,
+      employee: json['Employee']?.toString() ??
+          json['EmployeeName']?.toString() ??
+          json['EmpName']?.toString() ??
+          json['Name']?.toString() ??
+          json['UserName']?.toString() ??
+          'Employee',
+      leaveName: json['LeaveName']?.toString() ??
+          json['LeaveName1']?.toString() ??
+          json['LeaveTypeName']?.toString() ??
+          json['Category']?.toString() ??
+          'Leave',
+      leaveType: json['LeaveType']?.toString() ??
+          json['DurationType']?.toString() ??
+          'Full Day',
+      fromDate: json['FromDate']?.toString() ?? '',
+      toDate: json['ToDate']?.toString() ?? '',
+      noOfLeaves: (json['NoOfLeaves'] is num)
+          ? (json['NoOfLeaves'] as num).toDouble()
+          : (double.tryParse(json['NoOfLeaves']?.toString() ?? '') ??
+              double.tryParse(json['Days']?.toString() ?? '') ??
+              1.0),
+      reason: json['Reason']?.toString() ?? json['Remarks']?.toString() ?? '',
+      status: json['Status']?.toString() ??
+          json['ApprovalStatus']?.toString() ??
+          'Pending',
     );
   }
 
