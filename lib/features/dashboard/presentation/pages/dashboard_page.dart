@@ -558,7 +558,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
     // Refresh branch data from local storage to ensure fresh coordinates
     final user = await LocalStorageService.getUser();
-    final punchAnywhereFlag = await LocalStorageService.getOnlinePunchAnywhere();
+    final punchAnywhereFlag =
+        await LocalStorageService.getOnlinePunchAnywhere();
     final canPunchAnywhere =
         (user?.canPunchAnywhere ?? false) || punchAnywhereFlag == 1;
 
@@ -578,7 +579,9 @@ class _DashboardPageState extends State<DashboardPage> {
       branch = _selectedBranch;
     }
 
-    branch ??= (cachedBranches.isNotEmpty ? cachedBranches.first : _selectedBranch);
+    branch ??= (cachedBranches.isNotEmpty
+        ? cachedBranches.first
+        : _selectedBranch);
 
     if (branch != null) {
       _selectedBranch = branch;
@@ -663,7 +666,9 @@ class _DashboardPageState extends State<DashboardPage> {
         }
 
         if (permission == LocationPermission.deniedForever) {
-          debugPrint('❌ [CheckIn Error] Location permission permanently denied');
+          debugPrint(
+            '❌ [CheckIn Error] Location permission permanently denied',
+          );
           if (!mounted) return;
           _showLocationDialog(
             title: 'Permission Permanently Denied',
@@ -767,7 +772,9 @@ class _DashboardPageState extends State<DashboardPage> {
           return;
         }
 
-        debugPrint('✅ [CheckIn] Geofence check PASSED! Preparing punch data...');
+        debugPrint(
+          '✅ [CheckIn] Geofence check PASSED! Preparing punch data...',
+        );
       } else {
         debugPrint(
           '🚀 [CheckIn] OnlinePunchAnywhere is ENABLED (flag = 1). Geofence check bypassed! Capturing GPS coordinates if available...',
@@ -818,8 +825,7 @@ class _DashboardPageState extends State<DashboardPage> {
       ).formattedTime;
       final dateFormatted = DateFormat('dd/MM/yyyy').format(now);
       final empId = user?.employeeId ?? 1;
-      final accessPoint =
-          await LocalStorageService.getAccessPoint() ?? '';
+      final accessPoint = await LocalStorageService.getAccessPoint() ?? '';
       final branchId = branch.id;
       final branchName = branch.name;
 
@@ -838,9 +844,25 @@ class _DashboardPageState extends State<DashboardPage> {
       // On Check In (newFlag == 0), OutTime MUST be empty ("") because the employee is checked in, not out!
       final outTimeForTail = newFlag == 1 ? timeStr : '';
 
-      final reason = canPunchAnywhere
-          ? (newFlag == 0 ? 'Online Check In' : 'Online Check Out')
-          : (newFlag == 0 ? 'Mobile Check In' : 'Mobile Check Out');
+      final reason = newFlag == 0 ? 'Mobile Check In' : 'Mobile Check Out';
+
+      print(
+        '======================================================================',
+      );
+      print('📌 [CHECK IN / PUNCH ACTION TRIGGERED]');
+      print('⏰ Punch Time   : $timeStr');
+      print(
+        '🏷️ Punch Flag   : $newFlag (${newFlag == 0 ? "CHECK IN" : "CHECK OUT"})',
+      );
+      print('📍 Device Lat   : ${position?.latitude}');
+      print('📍 Device Long  : ${position?.longitude}');
+      print('🏢 Branch       : $branchName (ID: $branchId)');
+      print('👤 Employee ID  : $empId (User: ${user?.userName})');
+      print('📝 Punch Reason : $reason');
+      print('🌐 Anywhere Mode: $canPunchAnywhere');
+      print(
+        '======================================================================',
+      );
 
       debugPrint(
         '[CheckIn] Calling saveAttendanceWithResult (Lat: ${position?.latitude}, Lng: ${position?.longitude})...',
@@ -856,6 +878,10 @@ class _DashboardPageState extends State<DashboardPage> {
         outTime: outTimeForTail,
         latitude: position?.latitude,
         longitude: position?.longitude,
+      );
+
+      print(
+        '🏁 [CHECK IN RESULT]: Success=${saveResult.success} | Error="${saveResult.errorMessage}"',
       );
 
       debugPrint(
@@ -917,13 +943,9 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       });
 
-      final successText = canPunchAnywhere
-          ? (_isCheckedIn
-              ? 'Checked in successfully (Online)!'
-              : 'Checked out successfully (Online)!')
-          : (_isCheckedIn
-              ? 'Checked in successfully at $branchName!'
-              : 'Checked out successfully at $branchName!');
+      final successText = _isCheckedIn
+          ? 'Checked in successfully!'
+          : 'Checked out successfully!';
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -935,9 +957,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 size: 20,
               ),
               const SizedBox(width: 10),
-              Expanded(
-                child: Text(successText),
-              ),
+              Expanded(child: Text(successText)),
             ],
           ),
           backgroundColor: AppColors.success,
