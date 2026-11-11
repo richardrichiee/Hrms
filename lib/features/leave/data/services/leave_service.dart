@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/network/app_urls.dart';
 import '../../../../core/storage/local_storage_service.dart';
 import '../../../auth/data/services/user_rights_service.dart';
+import '../../../notifications/data/services/inbox_service.dart';
 import '../models/leave_application_model.dart';
 import '../models/leave_details_model.dart';
 
@@ -100,12 +101,17 @@ class LeaveService {
   Future<LeaveDetailsModel?> fetchLeaveApplicationDetails(int key) async {
     try {
       final accessPoint = await _getValidAccessPoint();
-      if (accessPoint == null) return null;
+      if (accessPoint == null) {
+        print('❌ [LeaveService.fetchLeaveApplicationDetails] Aborted: accessPoint is null/empty');
+        return null;
+      }
 
       final url = AppUrls.getLeaveApplicationDetailsUrl(
         key: key,
         accessPoint: accessPoint,
       );
+
+      print('🌐 [LeaveService.fetchLeaveApplicationDetails] GET $url (key=$key)');
 
       final response = await _dio.get(
         url,
@@ -113,6 +119,8 @@ class LeaveService {
           headers: {'Accept': 'application/json'},
         ),
       );
+
+      print('📥 [LeaveService.fetchLeaveApplicationDetails] Key=$key | HTTP ${response.statusCode} | Body: ${response.data}');
 
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
@@ -123,7 +131,17 @@ class LeaveService {
       }
 
       return null;
-    } catch (e) {
+    } on DioException catch (dioErr) {
+      print('❌ [LeaveService.fetchLeaveApplicationDetails] DIO EXCEPTION Key=$key:');
+      print('   Message  : ${dioErr.message}');
+      print('   Type     : ${dioErr.type}');
+      print('   Endpoint : ${dioErr.requestOptions.uri}');
+      print('   Status   : ${dioErr.response?.statusCode}');
+      print('   Body     : ${dioErr.response?.data}');
+      return null;
+    } catch (e, stack) {
+      print('❌ [LeaveService.fetchLeaveApplicationDetails] ERROR Key=$key: $e');
+      print('Stack: $stack');
       return null;
     }
   }
@@ -576,7 +594,10 @@ class LeaveService {
   }) async {
     try {
       final accessPoint = await _getValidAccessPoint();
-      if (accessPoint == null) return false;
+      if (accessPoint == null) {
+        print('❌ [LeaveService.updateLeaveApprovalStatus] Aborted: accessPoint is null/empty');
+        return false;
+      }
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
 
@@ -650,6 +671,14 @@ class LeaveService {
         }
       };
 
+      print('------------------------------------------------------------');
+      print('📡 [LEAVE APPROVAL SAVE -> POST /api/HRM/LeaveApplication/v1/Save]');
+      print('🌐 URL             : $url');
+      print('🏢 AccessPoint     : $accessPoint | UserID: $userId | Key: $key | Status: "$approvalStatus"');
+      print('🔍 Fetched Details : ${details?.toJson()}');
+      print('📦 Payload JSON    : ${jsonEncode(payload)}');
+      print('------------------------------------------------------------');
+
       final response = await _dio.post(
         url,
         data: payload,
@@ -661,8 +690,27 @@ class LeaveService {
         ),
       );
 
+      print('📥 [LEAVE APPROVAL SAVE RESPONSE]');
+      print('HTTP Status   : ${response.statusCode}');
+      print('Response Body : ${response.data}');
+      print('------------------------------------------------------------');
+
+      if (response.statusCode != 200) {
+        print('⚠️ [LeaveService.updateLeaveApprovalStatus] Non-200 HTTP status: ${response.statusCode}');
+      }
       return response.statusCode == 200;
-    } catch (e) {
+    } on DioException catch (dioErr) {
+      print('❌❌❌ [LeaveService.updateLeaveApprovalStatus] DIO EXCEPTION:');
+      print('   Message     : ${dioErr.message}');
+      print('   Type        : ${dioErr.type}');
+      print('   Endpoint    : ${dioErr.requestOptions.uri}');
+      print('   Req Payload : ${dioErr.requestOptions.data}');
+      print('   HTTP Status : ${dioErr.response?.statusCode}');
+      print('   Resp Body   : ${dioErr.response?.data}');
+      return false;
+    } catch (e, stack) {
+      print('❌❌❌ [LeaveService.updateLeaveApprovalStatus] UNEXPECTED EXCEPTION: $e');
+      print('Stack: $stack');
       return false;
     }
   }
@@ -670,11 +718,16 @@ class LeaveService {
   Future<Map<String, dynamic>?> fetchLeaveCancellationDetails(int key) async {
     try {
       final accessPoint = await _getValidAccessPoint();
-      if (accessPoint == null) return null;
+      if (accessPoint == null) {
+        print('❌ [LeaveService.fetchLeaveCancellationDetails] Aborted: accessPoint is null/empty');
+        return null;
+      }
       final url = AppUrls.getLeaveCancellationDetailsUrl(
         key: key,
         accessPoint: accessPoint,
       );
+
+      print('🌐 [LeaveService.fetchLeaveCancellationDetails] GET $url (key=$key)');
 
       final response = await _dio.get(
         url,
@@ -682,6 +735,8 @@ class LeaveService {
           headers: {'Accept': 'application/json'},
         ),
       );
+
+      print('📥 [LeaveService.fetchLeaveCancellationDetails] Key=$key | HTTP ${response.statusCode} | Body: ${response.data}');
 
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
@@ -692,7 +747,16 @@ class LeaveService {
         }
       }
       return null;
-    } catch (_) {
+    } on DioException catch (dioErr) {
+      print('❌ [LeaveService.fetchLeaveCancellationDetails] DIO EXCEPTION Key=$key:');
+      print('   Message  : ${dioErr.message}');
+      print('   Endpoint : ${dioErr.requestOptions.uri}');
+      print('   Status   : ${dioErr.response?.statusCode}');
+      print('   Body     : ${dioErr.response?.data}');
+      return null;
+    } catch (e, stack) {
+      print('❌ [LeaveService.fetchLeaveCancellationDetails] ERROR Key=$key: $e');
+      print('Stack: $stack');
       return null;
     }
   }
@@ -709,7 +773,10 @@ class LeaveService {
 
     try {
       final accessPoint = await _getValidAccessPoint();
-      if (accessPoint == null) return false;
+      if (accessPoint == null) {
+        print('❌ [LeaveService.saveLeaveCancellation] Aborted: accessPoint is null/empty');
+        return false;
+      }
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
       final raw = itemData?['raw'] as Map<String, dynamic>?;
@@ -729,7 +796,9 @@ class LeaveService {
           if (rights.transactions == 3) {
             finalApprovalStatus = 'A';
           }
-        } catch (_) {}
+        } catch (rightsErr) {
+          print('⚠️ [LeaveService.saveLeaveCancellation] UserRights fetch failed: $rightsErr');
+        }
       }
 
       // If cancellationId > 0, fetch the cancellation details to retrieve the true LvApplicationID and BranchID!
@@ -765,6 +834,13 @@ class LeaveService {
         }
       };
 
+      print('------------------------------------------------------------');
+      print('📡 [LEAVE CANCELLATION SAVE -> POST /api/HRM/LeaveCancellation/v1/Save]');
+      print('🌐 URL            : $url');
+      print('🏢 AccessPoint    : $accessPoint | UserID: $userId | CancelID: $cancellationId | Status: "$finalApprovalStatus"');
+      print('📦 Payload JSON   : ${jsonEncode(payload)}');
+      print('------------------------------------------------------------');
+
       final response = await _dio.post(
         url,
         data: payload,
@@ -775,6 +851,11 @@ class LeaveService {
           },
         ),
       );
+
+      print('📥 [LEAVE CANCELLATION SAVE RESPONSE]');
+      print('HTTP Status   : ${response.statusCode}');
+      print('Response Body : ${response.data}');
+      print('------------------------------------------------------------');
 
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
@@ -796,8 +877,20 @@ class LeaveService {
           }
           return true;
         }
+        print('⚠️ [LeaveService.saveLeaveCancellation] Server returned error in 200 body: ${data is Map ? data['error'] : data}');
       }
-    } catch (_) {}
+    } on DioException catch (dioErr) {
+      print('❌ [LeaveService.saveLeaveCancellation] DIO EXCEPTION:');
+      print('   Message     : ${dioErr.message}');
+      print('   Type        : ${dioErr.type}');
+      print('   Endpoint    : ${dioErr.requestOptions.uri}');
+      print('   Req Payload : ${dioErr.requestOptions.data}');
+      print('   HTTP Status : ${dioErr.response?.statusCode}');
+      print('   Resp Body   : ${dioErr.response?.data}');
+    } catch (e, stack) {
+      print('❌ [LeaveService.saveLeaveCancellation] ERROR: $e');
+      print('Stack: $stack');
+    }
 
     // Fallback: Directly cancel the Leave Application via 'C' status
     // This ensures leave cancellation succeeds gracefully even if the backend SQL Server
@@ -810,17 +903,21 @@ class LeaveService {
         final fallbackStatus = (approvalStatus == 'A' || approvalStatus == 'C' || approvalStatus == 'N')
             ? 'C'
             : 'A';
+        print('🔄 [LeaveService.saveLeaveCancellation] Falling back to updateLeaveApprovalStatus(key=$key, status=$fallbackStatus)...');
         final fallbackSuccess = await updateLeaveApprovalStatus(
           key: key,
           approvalStatus: fallbackStatus,
           itemData: itemData,
           remarks: remarks,
         );
+        print('🏁 [LeaveService.saveLeaveCancellation] Fallback result: $fallbackSuccess');
         if (fallbackSuccess) {
           return true;
         }
       }
-    } catch (_) {}
+    } catch (fallbackErr) {
+      print('❌ [LeaveService.saveLeaveCancellation] Fallback ERROR: $fallbackErr');
+    }
 
     return false;
   }
@@ -908,56 +1005,39 @@ class LeaveService {
     }
   }
 
-  /// POST /api/HRM/LeaveApplication/v1/Approve_Or_Forward/{timeStamp}/{accessPoint}
-  /// ApprovalStatus: "A" (Approve), "F" (Forward), "R" (Reject)
+  /// POST /api/HRM/General/v1/Approve/{accessPoint}/{timeStamp} ('A')
+  /// POST /api/HRM/General/v1/Recommendation/{accessPoint}/{timeStamp} ('F')
+  /// POST /api/HRM/General/v1/Reject/{accessPoint}/{timeStamp} ('R')
+  Future<InboxApprovalResult> approveOrForwardLeaveWithResult({
+    required int key,
+    required String approvalStatus,
+    String? menuLinkCode,
+    Map<String, dynamic>? itemData,
+  }) async {
+    print('🔄 [LeaveService.approveOrForwardLeave] Routing to General/$approvalStatus endpoint (key=$key, menuLinkCode=$menuLinkCode)');
+    return InboxService().submitApprovalAction(
+      recordId: key,
+      action: approvalStatus,
+      menuLinkCode: menuLinkCode,
+      defaultMenuLinkCode: '10',
+      itemData: itemData,
+    );
+  }
+
+  /// Backward-compatible wrapper returning bool
   Future<bool> approveOrForwardLeave({
     required int key,
     required String approvalStatus,
+    String? menuLinkCode,
     Map<String, dynamic>? itemData,
   }) async {
-    try {
-      final accessPoint = await _getValidAccessPoint();
-      if (accessPoint == null) return false;
-      final user = await LocalStorageService.getUser();
-      final userId = user?.userId ?? 2;
-
-      final url = AppUrls.getLeaveApproveOrForwardUrl(accessPoint: accessPoint);
-
-      final payload = {
-        "Head": {
-          "ApprovalStatus": approvalStatus,
-          "UserID": userId.toString(),
-          "Key": key.toString(),
-        }
-      };
-
-      try {
-        final response = await _dio.post(
-          url,
-          data: payload,
-          options: Options(
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-          ),
-        );
-
-        if (response.statusCode == 200) {
-          return true;
-        }
-      } catch (inner) {
-        // Fallback to Save endpoint if backend stored procedure for Approve_Or_Forward has SQL JSON formatting issue
-        return await updateLeaveApprovalStatus(
-          key: key,
-          approvalStatus: approvalStatus,
-          itemData: itemData,
-        );
-      }
-      return false;
-    } catch (e) {
-      return false;
-    }
+    final result = await approveOrForwardLeaveWithResult(
+      key: key,
+      approvalStatus: approvalStatus,
+      menuLinkCode: menuLinkCode,
+      itemData: itemData,
+    );
+    return result.success;
   }
 }
 

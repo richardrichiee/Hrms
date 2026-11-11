@@ -194,6 +194,8 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
             ? 'Forward'
             : 'Reject';
 
+    print('👆 [INBOX] Tapped $actionTitle ("$action") for item id=$id');
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -251,10 +253,19 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
     });
 
     final messenger = ScaffoldMessenger.of(context);
-    bool success = false;
+    InboxApprovalResult result = const InboxApprovalResult(success: false);
     final titleLower = widget.title.toLowerCase();
     final isCancellation =
         titleLower.contains('cancel') || titleLower.contains('cancellation');
+
+    print('====================================================');
+    print('🔔 [INBOX APPROVAL TRIGGERED]');
+    print('👉 Action: $actionTitle ("$action") | Item ID/Key: $id');
+    print('📂 Category: "${widget.title}" | MenuCode: ${widget.menuCode} | MenuLinkCode: ${widget.menuLinkCode}');
+    print('🔐 UserRights transactions: ${_userRights?.transactions}');
+    print('📋 isCancellation: $isCancellation');
+    print('📦 Item Data: $currentItem');
+    print('====================================================');
 
     if (isCancellation) {
       final raw = currentItem['raw'] as Map<String, dynamic>?;
@@ -264,36 +275,49 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
               raw?['ID']?.toString() ??
               id.toString()) ??
           id;
-      final lvAppId = raw?['LvApplicationID']?.toString() ??
-          raw?['LvApplicationId']?.toString() ??
-          raw?['LeaveApplicationID']?.toString() ??
-          raw?['LeaveID']?.toString() ??
-          id.toString();
 
-      success = await _leaveService.saveLeaveCancellation(
-        lvApplicationId: lvAppId,
-        cancellationId: lvCancelId,
-        remarks: action == 'A'
-            ? 'Approved via Mobile App'
-            : action == 'F'
-                ? 'Forwarded via Mobile App'
-                : 'Rejected via Mobile App',
-        approvalStatus: action,
+      print('🔄 [INBOX] Calling InboxService.submitApprovalAction for Leave Cancellation (ID=$lvCancelId, action=$action, menuLinkCode=${widget.menuLinkCode} -> fallback 12)');
+      result = await _inboxService.submitApprovalAction(
+        recordId: lvCancelId,
+        action: action,
+        menuLinkCode: widget.menuLinkCode,
+        defaultMenuLinkCode: '12',
         itemData: currentItem,
       );
     } else if (widget.menuCode == '19' || titleLower.contains('leave')) {
-      success = await _leaveService.approveOrForwardLeave(
+      print('🔄 [INBOX] Calling LeaveService.approveOrForwardLeaveWithResult(key=$id, approvalStatus=$action, menuLinkCode=${widget.menuLinkCode})');
+      result = await _leaveService.approveOrForwardLeaveWithResult(
         key: id,
         approvalStatus: action,
+        menuLinkCode: widget.menuLinkCode,
         itemData: currentItem,
       );
     } else if (widget.menuCode == '15' || titleLower.contains('claim')) {
-      success = await _claimService.approveOrForwardClaim(
+      print('🔄 [INBOX] Calling ClaimService.approveOrForwardClaimWithResult(key=$id, approvalStatus=$action, menuLinkCode=${widget.menuLinkCode})');
+      result = await _claimService.approveOrForwardClaimWithResult(
         key: id,
         approvalStatus: action,
+        menuLinkCode: widget.menuLinkCode,
         itemData: currentItem,
       );
+    } else if (widget.menuLinkCode.trim().isNotEmpty &&
+        widget.menuLinkCode.trim() != '0') {
+      print('🔄 [INBOX] Calling InboxService.submitApprovalAction(ID=$id, action=$action, menuLinkCode=${widget.menuLinkCode})');
+      result = await _inboxService.submitApprovalAction(
+        recordId: id,
+        action: action,
+        menuLinkCode: widget.menuLinkCode,
+        defaultMenuLinkCode: widget.menuLinkCode,
+        itemData: currentItem,
+      );
+    } else {
+      print('⚠️ [INBOX] Unhandled category! menuCode=${widget.menuCode}, menuLinkCode=${widget.menuLinkCode}, title=${widget.title}');
     }
+
+    final success = result.success;
+    print('====================================================');
+    print('🏁 [INBOX APPROVAL RESULT] Action: $actionTitle ("$action") | Item ID: $id | success=$success | error=${result.errorMessage}');
+    print('====================================================');
 
     if (mounted) {
       setState(() {
@@ -322,14 +346,18 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
           content: Text(
             success
                 ? '$categoryLabel $actionWord successfully!'
-                : 'Failed to process request. Please try again.',
+                : (result.errorMessage != null && result.errorMessage!.isNotEmpty
+                    ? result.errorMessage!
+                    : 'Failed to process request. Please try again.'),
           ),
-          backgroundColor: action == 'A'
-              ? Colors.green
-              : action == 'F'
-                  ? AppColors.primary
-                  : AppColors.error,
-          duration: const Duration(seconds: 2),
+          backgroundColor: !success
+              ? AppColors.error
+              : action == 'A'
+                  ? Colors.green
+                  : action == 'F'
+                      ? AppColors.primary
+                      : AppColors.error,
+          duration: const Duration(seconds: 3),
         ),
       );
     }

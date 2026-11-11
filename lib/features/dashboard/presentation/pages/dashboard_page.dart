@@ -227,6 +227,7 @@ class _DashboardPageState extends State<DashboardPage> {
           );
         } else if (_selectedBranch == null && _branches.isNotEmpty) {
           _selectedBranch = _branches.first;
+          LocalStorageService.saveSelectedBranchId(_selectedBranch!.value);
         } else if (_selectedBranch != null && _branches.isNotEmpty) {
           _selectedBranch = _branches.firstWhere(
             (b) => b.value == _selectedBranch!.value,

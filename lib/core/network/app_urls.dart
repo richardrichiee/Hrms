@@ -137,6 +137,24 @@ class AppUrls {
     return '${baseUrl}api/HRM/General/v1/InboxDetails/$accessPoint/$time';
   }
 
+  /// Endpoint: POST /api/HRM/General/v1/Approve/{accessPoint}/{timeStamp}
+  static String getGeneralApproveUrl({required String accessPoint}) {
+    final time = timestamp;
+    return '${baseUrl}api/HRM/General/v1/Approve/$accessPoint/$time';
+  }
+
+  /// Endpoint: POST /api/HRM/General/v1/Recommendation/{accessPoint}/{timeStamp}
+  static String getGeneralRecommendationUrl({required String accessPoint}) {
+    final time = timestamp;
+    return '${baseUrl}api/HRM/General/v1/Recommendation/$accessPoint/$time';
+  }
+
+  /// Endpoint: POST /api/HRM/General/v1/Reject/{accessPoint}/{timeStamp}
+  static String getGeneralRejectUrl({required String accessPoint}) {
+    final time = timestamp;
+    return '${baseUrl}api/HRM/General/v1/Reject/$accessPoint/$time';
+  }
+
   /// Endpoint: GET /api/HRM/LeaveCancellation/v1/Get/{id}/{timeStamp}/{accessPoint}
   static String getLeaveCancellationDetailsUrl({
     required int key,

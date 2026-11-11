@@ -130,7 +130,7 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
       _isProcessing = true;
     });
 
-    final success = await _claimService.approveOrForwardClaim(
+    final result = await _claimService.approveOrForwardClaimWithResult(
       key: widget.claimId,
       approvalStatus: action,
       itemData: widget.itemData,
@@ -141,7 +141,7 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
         _isProcessing = false;
       });
 
-      if (success) {
+      if (result.success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -153,8 +153,12 @@ class _ClaimApprovalDetailsPageState extends State<ClaimApprovalDetailsPage> {
         Navigator.pop(context, true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to process claim. Please try again.'),
+          SnackBar(
+            content: Text(
+              result.errorMessage != null && result.errorMessage!.isNotEmpty
+                  ? result.errorMessage!
+                  : 'Failed to process claim. Please try again.',
+            ),
             backgroundColor: AppColors.error,
           ),
         );

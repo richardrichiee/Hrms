@@ -6,6 +6,7 @@ import '../../../../core/network/app_urls.dart';
 import '../../../../core/storage/local_storage_service.dart';
 import '../../../auth/data/models/user_rights_model.dart';
 import '../../../auth/data/services/user_rights_service.dart';
+import '../../../notifications/data/services/inbox_service.dart';
 import '../models/claim_models.dart';
 
 class ClaimService {
@@ -635,54 +636,38 @@ class ClaimService {
     }
   }
 
-  /// POST /api/HRM/ClaimForm/v1/Approve_Or_Forward/{timeStamp}/{accessPoint}
-  /// ApprovalStatus: "A" (Approve), "F" (Forward), "R" (Reject)
+  /// POST /api/HRM/General/v1/Approve/{accessPoint}/{timeStamp} ('A')
+  /// POST /api/HRM/General/v1/Recommendation/{accessPoint}/{timeStamp} ('F')
+  /// POST /api/HRM/General/v1/Reject/{accessPoint}/{timeStamp} ('R')
+  Future<InboxApprovalResult> approveOrForwardClaimWithResult({
+    required int key,
+    required String approvalStatus,
+    String? menuLinkCode,
+    Map<String, dynamic>? itemData,
+  }) async {
+    print('🔄 [ClaimService.approveOrForwardClaim] Routing to General/$approvalStatus endpoint (key=$key, menuLinkCode=$menuLinkCode)');
+    return InboxService().submitApprovalAction(
+      recordId: key,
+      action: approvalStatus,
+      menuLinkCode: menuLinkCode,
+      defaultMenuLinkCode: '3',
+      itemData: itemData,
+    );
+  }
+
+  /// Backward-compatible wrapper returning bool
   Future<bool> approveOrForwardClaim({
     required int key,
     required String approvalStatus,
+    String? menuLinkCode,
     Map<String, dynamic>? itemData,
   }) async {
-    try {
-      final accessPoint = await _getValidAccessPoint();
-      if (accessPoint == null) return false;
-      final user = await LocalStorageService.getUser();
-      final userId = user?.userId ?? 2;
-
-      final url = AppUrls.getClaimApproveOrForwardUrl(accessPoint: accessPoint);
-
-      final payload = {
-        "Head": {
-          "ApprovalStatus": approvalStatus,
-          "UserID": userId.toString(),
-          "Key": key.toString(),
-        },
-      };
-
-      try {
-        final response = await _dio.post(
-          url,
-          data: payload,
-          options: Options(
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-          ),
-        );
-
-        if (response.statusCode == 200) {
-          return true;
-        }
-      } catch (inner) {
-        return await updateClaimApprovalStatus(
-          key: key,
-          approvalStatus: approvalStatus,
-          itemData: itemData,
-        );
-      }
-      return false;
-    } catch (e) {
-      return false;
-    }
+    final result = await approveOrForwardClaimWithResult(
+      key: key,
+      approvalStatus: approvalStatus,
+      menuLinkCode: menuLinkCode,
+      itemData: itemData,
+    );
+    return result.success;
   }
 }
