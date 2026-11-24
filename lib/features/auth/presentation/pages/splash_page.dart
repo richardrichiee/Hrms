@@ -42,15 +42,32 @@ class _SplashPageState extends State<SplashPage>
       final isLoggedIn = await LocalStorageService.isLoggedIn();
       final user = await LocalStorageService.getUser();
 
-      if (isLoggedIn || user != null) {
-        if (user != null &&
-            (user.employeeId <= 0 ||
-                user.empCode == '0' ||
-                user.empCode == '0.0')) {
+      if (isLoggedIn && user != null) {
+        if (user.employeeId <= 0 ||
+            user.empCode == '0' ||
+            user.empCode == '0.0') {
           await LocalStorageService.clearUserSession();
           return '/login';
         }
+
+        // Daily Re-Authentication Policy: expire session at the start of a new calendar day
+        final isExpiredForNewDay =
+            await LocalStorageService.isSessionExpiredForNewDay();
+        if (isExpiredForNewDay) {
+          await LocalStorageService.invalidateSessionForNewDay();
+          return '/login?reason=daily_reauth';
+        }
+
+        // Mandatory Biometric Gate for punch-needed users opening the app
+        final isBiometricVerified =
+            await LocalStorageService.isBiometricVerified();
+        if (user.isPunchNeeded && !isBiometricVerified) {
+          return '/biometric-verify';
+        }
+
         return '/dashboard';
+      } else if (isLoggedIn && user == null) {
+        await LocalStorageService.clearUserSession();
       }
 
       final accessPoint = await LocalStorageService.getAccessPoint();

@@ -49,15 +49,45 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
     setState(() => _isLoading = true);
     try {
       final branches = await _branchService.fetchBranches();
-      final savedBranchId = await LocalStorageService.getSelectedBranchId();
+
+      // Check user's dedicated branch from login
+      final defaultBranchId = await LocalStorageService.getUserDefaultBranchId();
+      final defaultBranchName = await LocalStorageService.getUserDefaultBranchName();
+      final effectiveBranchId = await LocalStorageService.getEffectiveUserBranchId();
+      final effectiveBranchName = await LocalStorageService.getEffectiveUserBranchName();
+
+      final dedicatedBranchId = (defaultBranchId != null && defaultBranchId > 0)
+          ? defaultBranchId
+          : (effectiveBranchId > 0 ? effectiveBranchId : null);
+      final dedicatedBranchName = (defaultBranchName != null && defaultBranchName.isNotEmpty)
+          ? defaultBranchName
+          : effectiveBranchName;
 
       BranchModel? target;
-      if (widget.initialBranch != null) {
+      if (dedicatedBranchId != null && dedicatedBranchId > 0) {
+        // Locked strictly to user's dedicated branch from login
+        try {
+          target = branches.firstWhere((b) => b.value == dedicatedBranchId);
+        } catch (_) {
+          final cached = await LocalStorageService.getBranches();
+          try {
+            target = cached.firstWhere((b) => b.value == dedicatedBranchId);
+          } catch (_) {
+            target = BranchModel(
+              value: dedicatedBranchId,
+              name: dedicatedBranchName.isNotEmpty
+                  ? dedicatedBranchName
+                  : 'Branch $dedicatedBranchId',
+            );
+          }
+        }
+      } else if (widget.initialBranch != null) {
         target = branches.firstWhere(
           (b) => b.value == widget.initialBranch!.value,
           orElse: () => widget.initialBranch!,
         );
       } else if (branches.isNotEmpty) {
+        final savedBranchId = await LocalStorageService.getSelectedBranchId();
         if (savedBranchId != null) {
           target = branches.firstWhere(
             (b) => b.value == savedBranchId,
@@ -68,8 +98,8 @@ class _BranchLocationSheetState extends State<BranchLocationSheet> {
         }
       } else {
         target = BranchModel(
-          value: savedBranchId ?? 1,
-          name: 'Head Office',
+          value: dedicatedBranchId ?? 1,
+          name: dedicatedBranchName.isNotEmpty ? dedicatedBranchName : 'Head Office',
         );
       }
 

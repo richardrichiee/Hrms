@@ -20,7 +20,10 @@ class AppUrls {
     required String password,
   }) {
     final time = timestamp;
-    return '${baseUrl}api/HRM/Mobile/v1/Login/$accessPoint/$time/$loginId/$password';
+    final encodedLogin = Uri.encodeComponent(loginId.trim());
+    final encodedPass = Uri.encodeComponent(password);
+    // Trailing slash ensures IIS does not treat passwords containing dots (e.g. welco.e) as static file extensions
+    return '${baseUrl}api/HRM/Mobile/v1/Login/$accessPoint/$time/$encodedLogin/$encodedPass/';
   }
 
   /// Endpoint: /api/HRM/Mobile/v1/BranchList/{accessPoint}/{timeStamp}/{UserID}
@@ -153,6 +156,15 @@ class AppUrls {
   static String getGeneralRejectUrl({required String accessPoint}) {
     final time = timestamp;
     return '${baseUrl}api/HRM/General/v1/Reject/$accessPoint/$time';
+  }
+
+  /// Endpoint: GET /api/HRM/LeaveCancellation/v1/List/{Page}/{timeStamp}/{accessPoint}
+  static String getLeaveCancellationListUrl({
+    int page = 1,
+    required String accessPoint,
+  }) {
+    final time = timestamp;
+    return '${baseUrl}api/HRM/LeaveCancellation/v1/List/$page/$time/$accessPoint';
   }
 
   /// Endpoint: GET /api/HRM/LeaveCancellation/v1/Get/{id}/{timeStamp}/{accessPoint}

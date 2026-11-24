@@ -23,37 +23,78 @@ class LeaveApplicationModel {
 
   factory LeaveApplicationModel.fromJson(Map<String, dynamic> json) {
     return LeaveApplicationModel(
-      key: int.tryParse(json['Key']?.toString() ??
-              json['ID']?.toString() ??
-              json['LvApplicationID']?.toString() ??
-              '') ??
+      key:
+          int.tryParse(
+            json['Key']?.toString() ??
+                json['ID']?.toString() ??
+                json['LvApplicationID']?.toString() ??
+                '',
+          ) ??
           0,
-      employee: json['Employee']?.toString() ??
+      employee:
+          json['Employee']?.toString() ??
           json['EmployeeName']?.toString() ??
           json['EmpName']?.toString() ??
           json['Name']?.toString() ??
           json['UserName']?.toString() ??
           'Employee',
-      leaveName: json['LeaveName']?.toString() ??
+      leaveName:
+          json['LeaveName']?.toString() ??
           json['LeaveName1']?.toString() ??
           json['LeaveTypeName']?.toString() ??
           json['Category']?.toString() ??
           'Leave',
-      leaveType: json['LeaveType']?.toString() ??
+      leaveType:
+          json['LeaveType']?.toString() ??
           json['DurationType']?.toString() ??
           'Full Day',
       fromDate: json['FromDate']?.toString() ?? '',
       toDate: json['ToDate']?.toString() ?? '',
-      noOfLeaves: (json['NoOfLeaves'] is num)
-          ? (json['NoOfLeaves'] as num).toDouble()
-          : (double.tryParse(json['NoOfLeaves']?.toString() ?? '') ??
-              double.tryParse(json['Days']?.toString() ?? '') ??
-              1.0),
+      noOfLeaves: () {
+        final rawType =
+            (json['LeaveType']?.toString() ??
+                    json['DurationType']?.toString() ??
+                    'Full Day')
+                .trim()
+                .toLowerCase();
+        final isHalfDay =
+            rawType == '2' ||
+            rawType == 'half day' ||
+            rawType == 'halfday' ||
+            rawType == 'hd' ||
+            rawType == 'hl';
+        final parsed = (json['NoOfLeaves'] is num)
+            ? (json['NoOfLeaves'] as num).toDouble()
+            : (double.tryParse(json['NoOfLeaves']?.toString() ?? '') ??
+                  double.tryParse(json['Days']?.toString() ?? ''));
+        if (isHalfDay) {
+          return (parsed == null || parsed == 0.0 || parsed == 1.0)
+              ? 0.5
+              : parsed;
+        }
+        return parsed ?? 1.0;
+      }(),
       reason: json['Reason']?.toString() ?? json['Remarks']?.toString() ?? '',
-      status: json['Status']?.toString() ??
+      status:
+          json['Status']?.toString() ??
           json['ApprovalStatus']?.toString() ??
           'Pending',
     );
+  }
+
+  String get formattedLeaveType {
+    final t = leaveType.trim().toLowerCase();
+    if (t == '2' ||
+        t == 'half day' ||
+        t == 'halfday' ||
+        t == 'hd' ||
+        t == 'hl') {
+      return 'Half Day';
+    }
+    if (t == '1' || t == 'full day' || t == 'fullday' || t == 'fd') {
+      return 'Full Day';
+    }
+    return leaveType.isNotEmpty ? leaveType : 'Full Day';
   }
 
   String get formattedStatus {

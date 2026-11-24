@@ -36,7 +36,10 @@ class LeaveDetailsModel {
           ? (json['NoOfLeaves'] as num).toDouble()
           : 1.0,
       approvalStatus: json['ApprovalStatus'] ?? 'A',
-      reason: json['Reason'] ?? '',
+      reason: (json['Reason'] != null &&
+              json['Reason'].toString().trim().isNotEmpty)
+          ? json['Reason'].toString().trim()
+          : (json['Remarks']?.toString().trim() ?? ''),
     );
   }
 

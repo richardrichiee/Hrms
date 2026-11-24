@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../core/storage/local_storage_service.dart';
 import '../../../auth/data/models/user_rights_model.dart';
 import '../../data/models/claim_models.dart';
 import '../../data/services/claim_service.dart';
@@ -32,7 +33,11 @@ class _ClaimsPageState extends State<ClaimsPage> {
 
   Future<void> _loadClaimsData() async {
     setState(() => _isLoading = true);
-    final rightsFuture = _claimService.fetchClaimUserRights();
+    final effectiveBranchId =
+        await LocalStorageService.getEffectiveUserBranchId();
+    final rightsFuture = _claimService.fetchClaimUserRights(
+      branchId: effectiveBranchId,
+    );
 
     final fDate = _filterFromDate != null
         ? DateFormat('dd/MM/yyyy').format(_filterFromDate!)
@@ -60,6 +65,47 @@ class _ClaimsPageState extends State<ClaimsPage> {
   }
 
   void _showApplyClaimModal() {
+    if (_userRights?.isHierarchyMissing == true) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Hierarchy Required',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Need to set Hierarchy for this user',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,

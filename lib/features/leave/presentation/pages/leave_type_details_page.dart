@@ -34,6 +34,7 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
 
   List<LeaveApplicationModel> _filteredApplications = [];
   LeaveBalanceItem? _balanceItem;
+  Set<int> _pendingCancellationKeys = {};
   bool _isLoading = true;
 
   @override
@@ -84,10 +85,14 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
 
       filtered.sort((a, b) => b.key.compareTo(a.key));
 
+      final pendingKeys =
+          await _leaveService.resolvePendingCancellationKeys(filtered);
+
       if (mounted) {
         setState(() {
           _filteredApplications = filtered;
           _balanceItem = balance;
+          _pendingCancellationKeys = pendingKeys;
           _isLoading = false;
         });
       }
@@ -136,7 +141,10 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
     });
   }
 
-  String _formatStatus(String? rawStatus) {
+  String _formatStatus(String? rawStatus, {int? key}) {
+    if (key != null && _pendingCancellationKeys.contains(key)) {
+      return 'Cancellation Pending';
+    }
     if (rawStatus == null || rawStatus.isEmpty) return 'Pending';
     final s = rawStatus.trim().toUpperCase();
     if (s == 'A' || s == 'APPROVED' || s == 'APPROVE') return 'Approved';
@@ -147,6 +155,10 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
   }
 
   Color _getStatusColor(String? rawStatus) {
+    final s = (rawStatus ?? '').trim().toUpperCase();
+    if (s == 'CANCELLATION PENDING' || s.contains('CANCELLATION')) {
+      return const Color(0xFFD97706);
+    }
     final status = _formatStatus(rawStatus);
     switch (status) {
       case 'Approved':
@@ -164,6 +176,10 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
   }
 
   Color _getStatusBg(String? rawStatus) {
+    final s = (rawStatus ?? '').trim().toUpperCase();
+    if (s == 'CANCELLATION PENDING' || s.contains('CANCELLATION')) {
+      return const Color(0xFFFEF3C7);
+    }
     final status = _formatStatus(rawStatus);
     switch (status) {
       case 'Approved':
@@ -181,10 +197,13 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
   }
 
   void _showLeaveDetailsModal(LeaveApplicationModel summaryItem) {
-    final statusText = _formatStatus(summaryItem.status);
-    final statusBgColor = _getStatusBg(summaryItem.status);
-    final statusTextColor = _getStatusColor(summaryItem.status);
-    final isCancellable = statusText != 'Cancelled' && statusText != 'Rejected';
+    final isPendingCancel = _pendingCancellationKeys.contains(summaryItem.key);
+    final statusText = _formatStatus(summaryItem.status, key: summaryItem.key);
+    final statusBgColor = _getStatusBg(statusText);
+    final statusTextColor = _getStatusColor(statusText);
+    final isCancellable = !isPendingCancel &&
+        statusText != 'Cancelled' &&
+        statusText != 'Rejected';
     final isApproved = statusText == 'Approved';
 
     showModalBottomSheet(
@@ -231,14 +250,19 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Leave Application Details',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
+                        const Expanded(
+                          child: Text(
+                            'Leave Application Details',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
@@ -249,7 +273,7 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                           child: Text(
                             statusText,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: statusTextColor,
                             ),
@@ -265,7 +289,7 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                     _DetailRow(
                       label: 'Leave Duration',
                       value:
-                          '$noOfLeaves ${(noOfLeaves == 1) ? "Day" : "Days"} (${summaryItem.leaveType})',
+                          '${(noOfLeaves % 1 == 0) ? noOfLeaves.toInt() : noOfLeaves} ${(noOfLeaves == 1) ? "Day" : "Days"} (${summaryItem.formattedLeaveType})',
                     ),
                     _DetailRow(
                       label: 'From Date',
@@ -279,6 +303,35 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                       label: 'Reason',
                       value: reason.isNotEmpty ? reason : 'No reason specified',
                     ),
+                    if (isPendingCancel) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFFDE68A)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.hourglass_top_rounded,
+                                color: Color(0xFFD97706), size: 18),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Cancellation request has been submitted and is awaiting approval.',
+                                style: TextStyle(
+                                  color: Color(0xFF92400E),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     if (isCancellable) ...[
                       Row(
@@ -304,7 +357,15 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                                         Icon(Icons.warning_amber_rounded,
                                             color: AppColors.error),
                                         SizedBox(width: 8),
-                                        Text('Cancel Leave Request'),
+                                        Expanded(
+                                          child: Text(
+                                            'Cancel Leave Request',
+                                            style: TextStyle(
+                                              fontSize: 17,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
                                       ],
                                     ),
                                     content: Text(isApproved
@@ -362,10 +423,19 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                                 if (mounted) {
                                   messenger.hideCurrentSnackBar();
                                   if (success) {
+                                    await LocalStorageService
+                                        .addPendingLeaveCancellationKey(
+                                            summaryItem.key);
+                                    if (mounted) {
+                                      setState(() {
+                                        _pendingCancellationKeys
+                                            .add(summaryItem.key);
+                                      });
+                                    }
                                     messenger.showSnackBar(
                                       const SnackBar(
                                         content: Text(
-                                            'Leave request cancelled successfully!'),
+                                            'Leave cancellation request submitted successfully!'),
                                         backgroundColor: Colors.green,
                                       ),
                                     );
@@ -676,9 +746,10 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                   separatorBuilder: (context, index) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final item = _filteredApplications[index];
-                    final statusText = _formatStatus(item.status);
-                    final statusBg = _getStatusBg(item.status);
-                    final statusColor = _getStatusColor(item.status);
+                    final statusText =
+                        _formatStatus(item.status, key: item.key);
+                    final statusBg = _getStatusBg(statusText);
+                    final statusColor = _getStatusColor(statusText);
 
                     return GestureDetector(
                       onTap: () => _showLeaveDetailsModal(item),
@@ -729,7 +800,7 @@ class _LeaveTypeDetailsPageState extends State<LeaveTypeDetailsPage> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              item.leaveType,
+                                              item.formattedLeaveType,
                                               style: const TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w500,

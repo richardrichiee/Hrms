@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../core/storage/local_storage_service.dart';
 import '../../data/services/change_password_service.dart';
 
 class ChangePasswordPage extends StatefulWidget {
@@ -91,6 +92,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     setState(() => _isLoading = false);
 
     if (result.isSuccess) {
+      await LocalStorageService.updateBiometricPasswordIfEnabled(newPassword);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -134,7 +137,10 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
+          icon: const Icon(
+            Icons.arrow_back_rounded,
+            color: AppColors.textPrimary,
+          ),
           onPressed: () => context.pop(),
         ),
         title: const Text(
@@ -462,7 +468,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                           if (value == null || value.trim().isEmpty) {
                             return 'Please confirm your new password';
                           }
-                          if (value.trim() != _newPasswordController.text.trim()) {
+                          if (value.trim() !=
+                              _newPasswordController.text.trim()) {
                             return 'Passwords do not match';
                           }
                           return null;

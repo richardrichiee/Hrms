@@ -160,24 +160,14 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Calendar Header with Month Name and Legend
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                monthName,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              Row(
-                children: [
-                  _legendItem(color: AppColors.secondary, label: 'Present'),
-                ],
-              ),
-            ],
+          // 1. Calendar Header with Month Name
+          Text(
+            monthName,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
           ),
           const SizedBox(height: 14),
 
@@ -324,25 +314,5 @@ class _AttendanceCalendarWidgetState extends State<AttendanceCalendarWidget> {
     );
   }
 
-  Widget _legendItem({required Color color, required String label}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-      ],
-    );
-  }
+
 }

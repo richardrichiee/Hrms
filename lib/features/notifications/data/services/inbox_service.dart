@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../../../../core/network/app_urls.dart';
 import '../../../../core/storage/local_storage_service.dart';
+import '../../../claims/data/services/claim_service.dart';
+import '../../../leave/data/services/leave_service.dart';
 
 class InboxService {
   final Dio _dio = Dio(
@@ -172,6 +174,46 @@ class InboxService {
       }
 
       final normalizedAction = action.trim().toUpperCase();
+
+      // For approval ('A'), route directly to module-specific Save endpoints
+      // because the backend's /General/Approve endpoint is an empty stub that does not update rows.
+      if (normalizedAction == 'A') {
+        if (resolvedMenuLinkCode == '10') {
+          print('🔄 [InboxService] Approving Leave Application (ID=$recordId) via Leave Save endpoint');
+          final success = await LeaveService().updateLeaveApprovalStatus(
+            key: recordId,
+            approvalStatus: 'A',
+            itemData: itemData,
+          );
+          return InboxApprovalResult(
+            success: success,
+            errorMessage: success ? null : 'Failed to approve leave application. Please try again.',
+          );
+        } else if (resolvedMenuLinkCode == '3') {
+          print('🔄 [InboxService] Approving Claim Form (ID=$recordId) via Claim Save endpoint');
+          final success = await ClaimService().updateClaimApprovalStatus(
+            key: recordId,
+            approvalStatus: 'A',
+            itemData: itemData,
+          );
+          return InboxApprovalResult(
+            success: success,
+            errorMessage: success ? null : 'Failed to approve claim application. Please try again.',
+          );
+        } else if (resolvedMenuLinkCode == '12') {
+          print('🔄 [InboxService] Approving Leave Cancellation (ID=$recordId) via Cancellation Save endpoint');
+          final success = await LeaveService().saveLeaveCancellation(
+            cancellationId: recordId,
+            approvalStatus: 'A',
+            itemData: itemData,
+          );
+          return InboxApprovalResult(
+            success: success,
+            errorMessage: success ? null : 'Failed to approve leave cancellation. Please try again.',
+          );
+        }
+      }
+
       String url;
       String actionEndpointName;
       if (normalizedAction == 'A') {

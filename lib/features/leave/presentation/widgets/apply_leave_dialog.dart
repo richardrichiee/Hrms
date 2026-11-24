@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../core/storage/local_storage_service.dart';
 import '../../../auth/data/models/user_rights_model.dart';
 import '../../../auth/data/services/user_rights_service.dart';
 import '../../data/services/leave_service.dart';
@@ -8,11 +9,13 @@ import '../../data/services/leave_service.dart';
 class ApplyLeaveDialog extends StatefulWidget {
   final String? initialLeaveId;
   final String? initialLeaveName;
+  final double? initialBalance;
 
   const ApplyLeaveDialog({
     super.key,
     this.initialLeaveId,
     this.initialLeaveName,
+    this.initialBalance,
   });
 
   @override
@@ -52,7 +55,12 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
 
   Future<void> _loadUserRights() async {
     try {
-      final rights = await _userRightsService.fetchUserRights(menuCode: 19);
+      final effectiveBranchId =
+          await LocalStorageService.getEffectiveUserBranchId();
+      final rights = await _userRightsService.fetchUserRights(
+        menuCode: 19,
+        branchId: effectiveBranchId,
+      );
       if (mounted) {
         setState(() {
           _userRights = rights;
@@ -783,7 +791,7 @@ class _ApplyLeaveDialogState extends State<ApplyLeaveDialog> {
                         )
                       : Text(
                           (_calculationError != null || _calculatedDays <= 0)
-                              ? 'Blocked: Leave Exceeded'
+                              ? 'Cannot Apply'
                               : 'Submit',
                           style: const TextStyle(
                             fontSize: 15,

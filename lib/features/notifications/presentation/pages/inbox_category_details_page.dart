@@ -140,8 +140,17 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
                     ? ''
                     : rawDetails;
 
+            final rawLeaveType = item['LeaveType']?.toString();
+            final formattedLeaveType = (rawLeaveType == '2' ||
+                    rawLeaveType?.toLowerCase() == 'half day')
+                ? 'Half Day'
+                : (rawLeaveType == '1' ||
+                        rawLeaveType?.toLowerCase() == 'full day')
+                    ? 'Full Day'
+                    : rawLeaveType;
+
             final type = item['ClaimType']?.toString() ??
-                item['LeaveType']?.toString() ??
+                formattedLeaveType ??
                 item['ExpenseType']?.toString() ??
                 item['Category']?.toString();
 
@@ -276,14 +285,27 @@ class _InboxCategoryDetailsPageState extends State<InboxCategoryDetailsPage> {
               id.toString()) ??
           id;
 
-      print('🔄 [INBOX] Calling InboxService.submitApprovalAction for Leave Cancellation (ID=$lvCancelId, action=$action, menuLinkCode=${widget.menuLinkCode} -> fallback 12)');
-      result = await _inboxService.submitApprovalAction(
-        recordId: lvCancelId,
-        action: action,
-        menuLinkCode: widget.menuLinkCode,
-        defaultMenuLinkCode: '12',
-        itemData: currentItem,
-      );
+      if (action == 'A') {
+        print('🔄 [INBOX] Calling LeaveService.saveLeaveCancellation for Leave Cancellation (ID=$lvCancelId, action=$action)');
+        final success = await _leaveService.saveLeaveCancellation(
+          cancellationId: lvCancelId,
+          approvalStatus: 'A',
+          itemData: currentItem,
+        );
+        result = InboxApprovalResult(
+          success: success,
+          errorMessage: success ? null : 'Failed to approve leave cancellation. Please try again.',
+        );
+      } else {
+        print('🔄 [INBOX] Calling InboxService.submitApprovalAction for Leave Cancellation (ID=$lvCancelId, action=$action, menuLinkCode=${widget.menuLinkCode} -> fallback 12)');
+        result = await _inboxService.submitApprovalAction(
+          recordId: lvCancelId,
+          action: action,
+          menuLinkCode: widget.menuLinkCode,
+          defaultMenuLinkCode: '12',
+          itemData: currentItem,
+        );
+      }
     } else if (widget.menuCode == '19' || titleLower.contains('leave')) {
       print('🔄 [INBOX] Calling LeaveService.approveOrForwardLeaveWithResult(key=$id, approvalStatus=$action, menuLinkCode=${widget.menuLinkCode})');
       result = await _leaveService.approveOrForwardLeaveWithResult(

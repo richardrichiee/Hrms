@@ -43,19 +43,20 @@ class ClaimService {
   }
 
   /// GET /api/HRM/General/v1/GetUserRights/{accessPoint}/{timeStamp}/15/{userId}/{branchId}
-  Future<UserRightsModel?> fetchClaimUserRights() async {
+  Future<UserRightsModel?> fetchClaimUserRights({int? branchId}) async {
     try {
       final accessPoint = await _getValidAccessPoint();
       if (accessPoint == null) return UserRightsModel.noAccess();
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
-      const branchId = 1;
+      final targetBranchId =
+          branchId ?? (await LocalStorageService.getEffectiveUserBranchId());
 
       final url = AppUrls.getUserRightsUrl(
         accessPoint: accessPoint,
         menuCode: 15, // Claim Form Menu Code
         userId: userId,
-        branchId: branchId,
+        branchId: targetBranchId,
       );
 
       final response = await _dio.get(
@@ -178,8 +179,9 @@ class ClaimService {
             if (userEmpId != '0' && c.empId == userEmpId) return true;
             if (userId != '0' && c.empId == userId) return true;
             if (userName.isNotEmpty &&
-                c.employeeName.toLowerCase().trim().contains(userName))
+                c.employeeName.toLowerCase().trim().contains(userName)) {
               return true;
+            }
             return false;
           }).toList();
 
@@ -436,6 +438,7 @@ class ClaimService {
     required int key,
     required String approvalStatus, // "A" for Approve, "R" for Reject
     Map<String, dynamic>? itemData,
+    String? remarks,
   }) async {
     try {
       final accessPoint = await _getValidAccessPoint();
@@ -461,61 +464,100 @@ class ClaimService {
       }
 
       final branchId =
-          headTable?['BranchID']?.toString() ??
-          itemData?['branchId']?.toString() ??
-          "1";
+          int.tryParse(
+            headTable?['BranchID']?.toString() ??
+                itemData?['branchId']?.toString() ??
+                "1",
+          ) ??
+          1;
       final finYearId =
-          headTable?['FinYearID']?.toString() ??
-          itemData?['finYearId']?.toString() ??
-          "1";
+          int.tryParse(
+            headTable?['FinYearID']?.toString() ??
+                itemData?['finYearId']?.toString() ??
+                "1",
+          ) ??
+          1;
       final empId =
-          headTable?['EmpID']?.toString() ??
-          itemData?['empId']?.toString() ??
-          "26";
+          int.tryParse(
+            headTable?['EmpID']?.toString() ??
+                itemData?['empId']?.toString() ??
+                "1",
+          ) ??
+          1;
       final amount =
-          headTable?['Amount']?.toString() ??
-          itemData?['amount']?.toString().replaceAll('₹', '').trim() ??
-          "10.00";
+          double.tryParse(
+            headTable?['Amount']?.toString().replaceAll('₹', '').trim() ??
+                itemData?['amount']?.toString().replaceAll('₹', '').trim() ??
+                '0',
+          ) ??
+          0.0;
+      final claimNumber = headTable?['ClaimNumber']?.toString() ?? "0";
       final claimDate =
           headTable?['ClaimDate']?.toString() ??
           (itemData?['date'] != null
               ? _formatToDate(itemData!['date'])
               : _formatToDate(DateTime.now().toString()));
-      final remarks = approvalStatus == 'A'
-          ? "Approved via Mobile App"
-          : (approvalStatus == 'F'
-                ? "Forwarded via Mobile App"
-                : "Rejected via Mobile App");
+
+      // Fetch existing user remarks from headTable or itemData so approval never overwrites them
+      String existingRemarks = '';
+      final fromHead = headTable?['Remarks']?.toString().trim();
+      if (fromHead != null &&
+          fromHead.isNotEmpty &&
+          !fromHead.toLowerCase().contains('via mobile')) {
+        existingRemarks = fromHead;
+      } else {
+        final fromItem =
+            itemData?['remarks']?.toString().trim() ??
+            itemData?['Remarks']?.toString().trim() ??
+            itemData?['reason']?.toString().trim() ??
+            itemData?['Reason']?.toString().trim() ??
+            itemData?['description']?.toString().trim();
+        if (fromItem != null &&
+            fromItem.isNotEmpty &&
+            !fromItem.toLowerCase().contains('via mobile')) {
+          existingRemarks = fromItem;
+        }
+      }
+
+      // Preserve user's original remarks; do not let generic mobile remarks overwrite them
+      final resolvedRemarks =
+          (remarks != null &&
+              remarks.trim().isNotEmpty &&
+              !remarks.toLowerCase().contains('via mobile'))
+          ? remarks.trim()
+          : (existingRemarks.isNotEmpty
+                ? existingRemarks
+                : 'Expense claim application');
 
       List<Map<String, dynamic>> tailList = [];
       if (tailTable != null && tailTable.isNotEmpty) {
         tailList = tailTable.map((t) {
           final m = Map<String, dynamic>.from(t as Map);
           return {
-            "ClaimID": m['ClaimID']?.toString() ?? "1",
+            "ClaimID": int.tryParse(m['ClaimID']?.toString() ?? "1") ?? 1,
             "ClaimName": m['ClaimName']?.toString() ?? "Expense Claim",
             "Amount": double.tryParse(m['Amount']?.toString() ?? '0') ?? 0.0,
             "Rate": double.tryParse(m['Rate']?.toString() ?? '0') ?? 0.0,
-            "RateFlag": m['RateFlag']?.toString() ?? "0",
-            "Qty": m['Qty']?.toString() ?? "1",
+            "RateFlag": int.tryParse(m['RateFlag']?.toString() ?? "0") ?? 0,
+            "Qty": double.tryParse(m['Qty']?.toString() ?? "1") ?? 1.0,
             "Reason": m['Reason']?.toString() ?? "Expense Claim",
             "Date": m['Date']?.toString() ?? claimDate,
-            "Status": "0",
+            "Status": approvalStatus == 'A' ? 1 : 0,
             "StatusText": approvalStatus == 'A' ? "Approved" : "Rejected",
           };
         }).toList();
       } else {
         tailList = [
           {
-            "ClaimID": "2",
+            "ClaimID": 1,
             "ClaimName": itemData?['claimCategory'] ?? "General Expense",
-            "Amount": double.tryParse(amount) ?? 10.0,
+            "Amount": amount,
             "Rate": 0.0,
-            "RateFlag": "0",
-            "Qty": "1",
+            "RateFlag": 0,
+            "Qty": 1.0,
             "Reason": itemData?['description'] ?? "Expense Claim",
             "Date": claimDate,
-            "Status": "0",
+            "Status": approvalStatus == 'A' ? 1 : 0,
             "StatusText": approvalStatus == 'A' ? "Approved" : "Rejected",
           },
         ];
@@ -532,12 +574,12 @@ class ClaimService {
           "BranchID": branchId,
           "FinYearID": finYearId,
           "ClaimDate": claimDate,
-          "ClaimNumber": key.toString(),
+          "ClaimNumber": claimNumber,
           "EmpID": empId,
           "Amount": amount,
           "ApprovalStatus": approvalStatus, // "A" or "R"
-          "Remarks": remarks,
-          "addBy": userId.toString(),
+          "Remarks": resolvedRemarks,
+          "addBy": userId,
         },
         "Tail": tailList,
       };
@@ -553,22 +595,43 @@ class ClaimService {
         ),
       );
 
-      return response.statusCode == 200;
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data;
+        if (data is Map &&
+            (data['error'] == null ||
+                (data['error'] is Map && (data['error'] as Map).isEmpty))) {
+          return true;
+        }
+      }
+      return false;
     } catch (e) {
       return false;
     }
   }
 
   /// POST /api/HRM/ClaimForm/v1/Delete/{id}/{timeStamp}/{accessPoint}
-  Future<bool> deleteClaim(int id) async {
+  Future<({bool success, String? message})> deleteClaimWithResult(
+    int id,
+  ) async {
     try {
       final accessPoint = await _getValidAccessPoint();
-      if (accessPoint == null) return false;
+      if (accessPoint == null) {
+        return (success: false, message: 'Access point not configured.');
+      }
       final url = AppUrls.getDeleteClaimUrl(id: id, accessPoint: accessPoint);
+
+      debugPrint(
+        '==================== [ClaimService] DELETE CLAIM ====================',
+      );
+      debugPrint(
+        '👉 [ClaimService] Endpoint: $url | ClaimID: $id | AccessPoint: $accessPoint',
+      );
 
       final response = await _dio.post(
         url,
         options: Options(
+          responseType: ResponseType.plain,
+          validateStatus: (status) => status != null && status < 600,
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -576,10 +639,142 @@ class ClaimService {
         ),
       );
 
-      return response.statusCode == 200;
+      debugPrint(
+        '📥 [ClaimService] Delete Response Status: ${response.statusCode}',
+      );
+      debugPrint('📥 [ClaimService] Delete Response Body: ${response.data}');
+
+      final code = response.statusCode ?? 0;
+      if (code >= 200 && code < 300) {
+        final rawBody = response.data?.toString().trim() ?? '';
+        if (rawBody.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(rawBody);
+            if (decoded is Map) {
+              final err = decoded['error'];
+              if (err is Map &&
+                  err['Message'] != null &&
+                  err['Message'].toString().trim().isNotEmpty) {
+                return (
+                  success: false,
+                  message: _cleanDeleteErrorMessage(
+                    err['Message'].toString().trim(),
+                  ),
+                );
+              }
+              final val = decoded['value'];
+              if (val is List && val.isNotEmpty && val.first is Map) {
+                final first = val.first as Map;
+                final rawMsg =
+                    (first['ERRORMESSAGE'] ??
+                            first['ErrorMessage'] ??
+                            first['errormessage'] ??
+                            first['Message'] ??
+                            first['message'])
+                        ?.toString()
+                        .trim() ??
+                    '';
+                if (rawMsg.isNotEmpty) {
+                  final lower = rawMsg.toLowerCase();
+                  final isSuccessMsg =
+                      lower.contains('success') ||
+                      lower.contains('deleted') ||
+                      lower.contains('ok') ||
+                      lower == '1' ||
+                      lower == 'true';
+                  if (!isSuccessMsg) {
+                    return (
+                      success: false,
+                      message: _cleanDeleteErrorMessage(rawMsg),
+                    );
+                  }
+                  return (success: true, message: rawMsg);
+                }
+              }
+            }
+          } catch (_) {
+            // Non-JSON or empty 204/200 body still counts as success
+          }
+        }
+        return (
+          success: true,
+          message: 'Claim application deleted successfully!',
+        );
+      }
+
+      String? serverMsg;
+      if (response.data != null) {
+        try {
+          final decoded = jsonDecode(response.data.toString());
+          if (decoded is Map) {
+            serverMsg =
+                decoded['error']?['Message']?.toString() ??
+                decoded['Message']?.toString() ??
+                decoded['ExceptionMessage']?.toString();
+          }
+        } catch (_) {}
+      }
+
+      return (
+        success: false,
+        message: _cleanDeleteErrorMessage(
+          serverMsg ?? 'Server returned HTTP $code while deleting claim.',
+        ),
+      );
+    } on DioException catch (dioErr) {
+      debugPrint('❌ [ClaimService] deleteClaim DioException: $dioErr');
+      final code = dioErr.response?.statusCode;
+      if (code != null && code >= 200 && code < 300) {
+        return (
+          success: true,
+          message: 'Claim application deleted successfully!',
+        );
+      }
+      final serverData = dioErr.response?.data;
+      String? msg;
+      if (serverData != null) {
+        try {
+          final decoded = serverData is Map
+              ? serverData
+              : jsonDecode(serverData.toString());
+          if (decoded is Map) {
+            msg =
+                decoded['error']?['Message']?.toString() ??
+                decoded['Message']?.toString() ??
+                decoded['ExceptionMessage']?.toString();
+          }
+        } catch (_) {}
+      }
+      return (
+        success: false,
+        message: _cleanDeleteErrorMessage(
+          msg ?? 'Server error ($code) while deleting claim.',
+        ),
+      );
     } catch (e) {
-      return false;
+      debugPrint('❌ [ClaimService] deleteClaim error: $e');
+      return (success: false, message: _cleanDeleteErrorMessage(e.toString()));
     }
+  }
+
+  static String _cleanDeleteErrorMessage(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return 'Failed to delete claim. Please try again.';
+    if (trimmed.contains('validateStatus') ||
+        trimmed.contains('status code of')) {
+      return 'Server error occurred while deleting claim. Please try again later.';
+    }
+    if (trimmed.contains('\n')) {
+      final firstLine = trimmed.split(RegExp(r'\r?\n')).first.trim();
+      if (firstLine.isNotEmpty && firstLine.length <= 150) return firstLine;
+    }
+    return trimmed.length > 150 ? '${trimmed.substring(0, 147)}...' : trimmed;
+  }
+
+  /// Backward-compatible boolean wrapper
+  Future<bool> deleteClaim(int id) async {
+    final res = await deleteClaimWithResult(id);
+    return res.success;
   }
 
   /// POST /api/HRM/ClaimForm/v1/EmpSearch/{timeStamp}/{accessPoint}
@@ -592,13 +787,14 @@ class ClaimService {
       if (accessPoint == null) return [];
       final user = await LocalStorageService.getUser();
       final userId = user?.userId ?? 2;
-      const branchId = 1;
+      final effectiveBranchId =
+          await LocalStorageService.getEffectiveUserBranchId();
 
       final url = AppUrls.getClaimEmpSearchUrl(accessPoint: accessPoint);
 
       final payload = {
         "Head": {
-          "BranchID": branchId.toString(),
+          "BranchID": effectiveBranchId.toString(),
           "UserID": userId.toString(),
           "FromDate": (fromDate != null && fromDate.isNotEmpty)
               ? fromDate
@@ -636,22 +832,44 @@ class ClaimService {
     }
   }
 
-  /// POST /api/HRM/General/v1/Approve/{accessPoint}/{timeStamp} ('A')
-  /// POST /api/HRM/General/v1/Recommendation/{accessPoint}/{timeStamp} ('F')
   /// POST /api/HRM/General/v1/Reject/{accessPoint}/{timeStamp} ('R')
+  /// POST /api/HRM/ClaimForm/v1/Save/{id}/{userId}/{timeStamp}/{accessPoint} ('A', 'F')
   Future<InboxApprovalResult> approveOrForwardClaimWithResult({
     required int key,
     required String approvalStatus,
     String? menuLinkCode,
     Map<String, dynamic>? itemData,
+    String? remarks,
   }) async {
-    print('🔄 [ClaimService.approveOrForwardClaim] Routing to General/$approvalStatus endpoint (key=$key, menuLinkCode=$menuLinkCode)');
-    return InboxService().submitApprovalAction(
-      recordId: key,
-      action: approvalStatus,
-      menuLinkCode: menuLinkCode,
-      defaultMenuLinkCode: '3',
+    final normalized = approvalStatus.trim().toUpperCase();
+    if (normalized == 'R') {
+      print(
+        '🔄 [ClaimService.approveOrForwardClaim] Rejecting via General/Reject (key=$key, menuLinkCode=$menuLinkCode)',
+      );
+      return InboxService().submitApprovalAction(
+        recordId: key,
+        action: 'R',
+        menuLinkCode: menuLinkCode,
+        defaultMenuLinkCode: '3',
+        itemData: itemData,
+      );
+    }
+
+    print(
+      '🔄 [ClaimService.approveOrForwardClaim] Approving via Claim Save endpoint (key=$key, status=$normalized)',
+    );
+    final success = await updateClaimApprovalStatus(
+      key: key,
+      approvalStatus: normalized,
       itemData: itemData,
+      remarks: remarks,
+    );
+    if (success) {
+      return const InboxApprovalResult(success: true);
+    }
+    return const InboxApprovalResult(
+      success: false,
+      errorMessage: 'Failed to approve claim application. Please try again.',
     );
   }
 
@@ -661,12 +879,14 @@ class ClaimService {
     required String approvalStatus,
     String? menuLinkCode,
     Map<String, dynamic>? itemData,
+    String? remarks,
   }) async {
     final result = await approveOrForwardClaimWithResult(
       key: key,
       approvalStatus: approvalStatus,
       menuLinkCode: menuLinkCode,
       itemData: itemData,
+      remarks: remarks,
     );
     return result.success;
   }
