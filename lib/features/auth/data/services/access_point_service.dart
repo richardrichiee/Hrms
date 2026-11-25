@@ -61,6 +61,7 @@ class AccessPointService {
             if (oldAccessPoint != null &&
                 oldAccessPoint.toLowerCase() != accessPoint.toLowerCase()) {
               await LocalStorageService.clearUserSession();
+              await LocalStorageService.clearBiometricCredentials();
             }
             // Save to secure local storage
             await LocalStorageService.saveAccessPoint(accessPoint);

@@ -140,7 +140,10 @@ class TodayPunchHistorySheet extends StatelessWidget {
               children: [
                 // Total Punches Chip
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6.5,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(20),
@@ -171,7 +174,10 @@ class TodayPunchHistorySheet extends StatelessWidget {
                 // Current Status Chip
                 if (history.isNotEmpty) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6.5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6.5,
+                    ),
                     decoration: BoxDecoration(
                       color: isCurrentlyIn
                           ? const Color(0xFFECFDF5)
@@ -214,7 +220,10 @@ class TodayPunchHistorySheet extends StatelessWidget {
 
                   // Earliest In Chip
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6.5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6.5,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF0FDF4),
                       borderRadius: BorderRadius.circular(20),
@@ -264,7 +273,10 @@ class TodayPunchHistorySheet extends StatelessWidget {
                     SizedBox(height: 12),
                     Text(
                       'Loading punch activity...',
-                      style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: Color(0xFF64748B),
+                      ),
                     ),
                   ],
                 ),
@@ -303,7 +315,10 @@ class TodayPunchHistorySheet extends StatelessWidget {
                     const Text(
                       'Punches recorded via mobile or web portal will be displayed chronologically here.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -332,8 +347,13 @@ class TodayPunchHistorySheet extends StatelessWidget {
 
                   final hasExplicitReason =
                       item.reason != null && item.reason!.trim().isNotEmpty;
-                  final isMobilePunch = hasExplicitReason &&
-                      item.reason!.toLowerCase().contains('mobile');
+                  final reasonLower = (item.reason ?? '').toLowerCase();
+                  final hasCoordinates =
+                      item.latitude != null || item.longitude != null;
+                  final isMobilePunch =
+                      reasonLower.contains('mobile') ||
+                      reasonLower.contains('online') ||
+                      hasCoordinates;
 
                   final displayReason = hasExplicitReason
                       ? item.reason!
@@ -370,7 +390,10 @@ class TodayPunchHistorySheet extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: bgColor,
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: borderColor, width: 2),
+                                  border: Border.all(
+                                    color: borderColor,
+                                    width: 2,
+                                  ),
                                   boxShadow: [
                                     BoxShadow(
                                       color: color.withValues(alpha: 0.12),
@@ -380,7 +403,9 @@ class TodayPunchHistorySheet extends StatelessWidget {
                                   ],
                                 ),
                                 child: Icon(
-                                  isIn ? Icons.south_west_rounded : Icons.north_east_rounded,
+                                  isIn
+                                      ? Icons.south_west_rounded
+                                      : Icons.north_east_rounded,
                                   color: color,
                                   size: 17,
                                 ),
@@ -390,7 +415,9 @@ class TodayPunchHistorySheet extends StatelessWidget {
                                   child: Container(
                                     width: 2,
                                     color: const Color(0xFFE2E8F0),
-                                    margin: const EdgeInsets.symmetric(vertical: 4),
+                                    margin: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
                                   ),
                                 ),
                             ],
@@ -410,7 +437,9 @@ class TodayPunchHistorySheet extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                ),
                                 boxShadow: const [
                                   BoxShadow(
                                     color: Color(0x060F172A),
@@ -506,9 +535,9 @@ class TodayPunchHistorySheet extends StatelessWidget {
                                             Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                horizontal: 7,
-                                                vertical: 3,
-                                              ),
+                                                    horizontal: 7,
+                                                    vertical: 3,
+                                                  ),
                                               decoration: BoxDecoration(
                                                 color: sourceBgColor,
                                                 borderRadius:
@@ -531,7 +560,8 @@ class TodayPunchHistorySheet extends StatelessWidget {
                                                     sourceLabel,
                                                     style: TextStyle(
                                                       fontSize: 10,
-                                                      fontWeight: FontWeight.w700,
+                                                      fontWeight:
+                                                          FontWeight.w700,
                                                       color: sourceTextColor,
                                                     ),
                                                   ),
@@ -541,10 +571,17 @@ class TodayPunchHistorySheet extends StatelessWidget {
                                             if (hasExplicitReason &&
                                                 !displayReason
                                                     .toLowerCase()
-                                                    .contains('web portal check') &&
+                                                    .contains(
+                                                      'web portal check',
+                                                    ) &&
                                                 !displayReason
                                                     .toLowerCase()
-                                                    .contains('mobile check')) ...[
+                                                    .contains('mobile check') &&
+                                                !displayReason
+                                                    .toLowerCase()
+                                                    .contains(
+                                                      'online check',
+                                                    )) ...[
                                               const SizedBox(width: 6),
                                               Flexible(
                                                 child: Text(

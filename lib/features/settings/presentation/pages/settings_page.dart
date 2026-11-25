@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../core/storage/local_storage_service.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../auth/data/services/auth_service.dart';
+import '../../../auth/data/services/biometric_service.dart';
 import '../../../profile/data/models/employee_details_model.dart';
 import '../../../profile/data/services/employee_service.dart';
 import '../widgets/branch_location_sheet.dart';
@@ -16,12 +19,17 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _employeeService = EmployeeService();
+  final _biometricService = BiometricService();
+  final _authService = AuthService();
 
   UserModel? _user;
   EmployeeDetailsModel? _employeeDetails;
 
   bool _biometricLogin = false;
+  bool _isUpdatingBiometric = false;
   bool _isLoading = true;
+
+  bool get _isPunchMandatory => _user?.isPunchNeeded == true;
 
   @override
   void initState() {
@@ -35,15 +43,19 @@ class _SettingsPageState extends State<SettingsPage> {
       final results = await Future.wait([
         LocalStorageService.getUser(),
         _employeeService.fetchEmployeeDashboard(),
+        LocalStorageService.isBiometricEnabled(),
       ]);
 
       final user = results[0] as UserModel?;
       final details = results[1] as EmployeeDetailsModel?;
+      final biometricEnabled = results[2] as bool;
 
       if (mounted) {
         setState(() {
           _user = user;
           _employeeDetails = details;
+          _biometricLogin =
+              (user?.isPunchNeeded == true) ? true : biometricEnabled;
           _isLoading = false;
         });
       }
@@ -52,6 +64,288 @@ class _SettingsPageState extends State<SettingsPage> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  Future<void> _handleBiometricToggle(bool enable) async {
+    if (_isPunchMandatory || _isUpdatingBiometric) return;
+
+    setState(() => _isUpdatingBiometric = true);
+    try {
+      if (!enable) {
+        await LocalStorageService.clearBiometricCredentials();
+        if (mounted) {
+          setState(() {
+            _biometricLogin = false;
+            _isUpdatingBiometric = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Biometric login disabled.'),
+              backgroundColor: AppColors.textPrimary,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check device support & enrollment
+      final available = await _biometricService.isBiometricAvailable();
+      if (!available) {
+        if (mounted) {
+          setState(() => _isUpdatingBiometric = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Biometrics are not configured on this device. Please enroll Fingerprint or Face ID in device settings.',
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Prompt biometric verification first
+      final authResult = await _biometricService.authenticate(
+        localizedReason: 'Verify your identity to enable biometric login',
+      );
+      if (!mounted) return;
+
+      if (!authResult.isSuccess) {
+        setState(() => _isUpdatingBiometric = false);
+        if (!authResult.isCancelled) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                authResult.errorMessage ?? 'Biometric verification failed.',
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check if credentials are already securely cached
+      var creds = await LocalStorageService.getBiometricCredentials();
+      if (creds == null) {
+        final verifiedCreds = await _promptVerifyCredentialsDialog();
+        if (!mounted) return;
+        if (verifiedCreds == null) {
+          setState(() => _isUpdatingBiometric = false);
+          return;
+        }
+        await LocalStorageService.saveBiometricCredentials(
+          loginId: verifiedCreds.loginId,
+          password: verifiedCreds.password,
+        );
+      }
+
+      await LocalStorageService.setBiometricEnabled(true);
+      await LocalStorageService.setBiometricOnlyMode(true);
+      await LocalStorageService.setBiometricVerified(true);
+
+      if (mounted) {
+        setState(() {
+          _biometricLogin = true;
+          _isUpdatingBiometric = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Biometric login enabled successfully.'),
+            backgroundColor: AppColors.secondary,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isUpdatingBiometric = false);
+      }
+    }
+  }
+
+  Future<({String loginId, String password})?>
+      _promptVerifyCredentialsDialog() async {
+    String initialLoginId = '';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      initialLoginId = prefs.getString('saved_login_username') ?? '';
+    } catch (_) {}
+
+    final loginIdController = TextEditingController(text: initialLoginId);
+    final passwordController = TextEditingController();
+    bool obscurePassword = true;
+    bool isVerifying = false;
+    String? dialogError;
+
+    if (!mounted) return null;
+
+    final result = await showDialog<({String loginId, String password})>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              title: const Row(
+                children: [
+                  Icon(
+                    Icons.fingerprint_rounded,
+                    color: AppColors.primary,
+                    size: 22,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Confirm Credentials',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Enter your Login ID and Password once so we can securely store them for biometric sign-in.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: loginIdController,
+                      enabled: !isVerifying,
+                      decoration: InputDecoration(
+                        labelText: 'Login ID',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: passwordController,
+                      enabled: !isVerifying,
+                      obscureText: obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            size: 18,
+                          ),
+                          onPressed: () {
+                            setDialogState(() {
+                              obscurePassword = !obscurePassword;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    if (dialogError != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        dialogError!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isVerifying
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(null),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isVerifying
+                      ? null
+                      : () async {
+                          final uid = loginIdController.text.trim();
+                          final pwd = passwordController.text.trim();
+                          if (uid.isEmpty || pwd.isEmpty) {
+                            setDialogState(() {
+                              dialogError =
+                                  'Please enter both Login ID and Password.';
+                            });
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isVerifying = true;
+                            dialogError = null;
+                          });
+
+                          final loginRes = await _authService.login(
+                            loginId: uid,
+                            password: pwd,
+                          );
+
+                          if (!dialogContext.mounted) return;
+
+                          if (loginRes.isSuccess) {
+                            Navigator.of(dialogContext).pop(
+                              (loginId: uid, password: pwd),
+                            );
+                          } else {
+                            setDialogState(() {
+                              isVerifying = false;
+                              dialogError = loginRes.errorMessage ??
+                                  'Invalid credentials. Please try again.';
+                            });
+                          }
+                        },
+                  child: isVerifying
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Verify & Enable'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    loginIdController.dispose();
+    passwordController.dispose();
+    return result;
   }
 
   String get _userName {
@@ -199,16 +493,20 @@ class _SettingsPageState extends State<SettingsPage> {
                     const SizedBox(height: 8),
                     _SettingsCard(
                       children: [
-                        _SettingsSwitchTile(
-                          icon: Icons.fingerprint_rounded,
-                          iconBg: const Color(0xFFECFDF5),
-                          iconColor: const Color(0xFF059669),
-                          title: 'Biometric Login',
-                          subtitle: 'Use Fingerprint / Face ID for quick punch',
-                          value: _biometricLogin,
-                          onChanged: (val) => setState(() => _biometricLogin = val),
-                        ),
-                        const _SettingsDivider(),
+                        if (!_isPunchMandatory) ...[
+                          _SettingsSwitchTile(
+                            icon: Icons.fingerprint_rounded,
+                            iconBg: const Color(0xFFECFDF5),
+                            iconColor: const Color(0xFF059669),
+                            title: 'Biometric Login',
+                            subtitle:
+                                'Use Fingerprint / Face unlock to sign in',
+                            value: _biometricLogin,
+                            enabled: !_isUpdatingBiometric,
+                            onChanged: _handleBiometricToggle,
+                          ),
+                          const _SettingsDivider(),
+                        ],
                         _SettingsActionTile(
                           icon: Icons.lock_outline_rounded,
                           iconBg: const Color(0xFFFFFBEB),
@@ -461,7 +759,8 @@ class _SettingsSwitchTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final bool enabled;
+  final ValueChanged<bool>? onChanged;
 
   const _SettingsSwitchTile({
     required this.icon,
@@ -470,6 +769,7 @@ class _SettingsSwitchTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.value,
+    this.enabled = true,
     required this.onChanged,
   });
 
@@ -512,11 +812,12 @@ class _SettingsSwitchTile extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 8),
           Switch.adaptive(
             value: value,
             activeTrackColor: AppColors.primary,
             activeThumbColor: Colors.white,
-            onChanged: onChanged,
+            onChanged: enabled ? onChanged : null,
           ),
         ],
       ),

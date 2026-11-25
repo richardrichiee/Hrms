@@ -201,13 +201,15 @@ class AttendanceService {
         ]
       };
 
-      debugPrint('----------------------------------------------------------------------');
-      debugPrint('📡 [AttendanceService.saveAttendance API CALL]');
-      debugPrint('[AttendanceService] Access Point: $accessPoint');
-      debugPrint('[AttendanceService] User ID: $userId, Employee ID: $employeeId, Branch ID: $branchId');
-      debugPrint('[AttendanceService] Request URL: $url');
-      debugPrint('[AttendanceService] Request Payload: ${jsonEncode(payload)}');
-      debugPrint('----------------------------------------------------------------------');
+      print('----------------------------------------------------------------------');
+      print('📡 [CHECK IN API CALL -> POST /api/HRM/Attendance/v1/Save]');
+      print('🌐 URL    : $url');
+      print('🏢 Branch : $branchId | Emp: $employeeId | User: $userId');
+      print('📍 Latitude sent in Tail2 : ${latitude?.toString()}');
+      print('📍 Longitude sent in Tail2: ${longitude?.toString()}');
+      print('📦 Full JSON Payload:');
+      print(jsonEncode(payload));
+      print('----------------------------------------------------------------------');
 
       final response = await _dio.post(
         url,
@@ -220,9 +222,10 @@ class AttendanceService {
         ),
       );
 
-      debugPrint('📥 [AttendanceService] Response Received:');
-      debugPrint('[AttendanceService] HTTP Status Code: ${response.statusCode}');
-      debugPrint('[AttendanceService] Raw Response Body: ${response.data}');
+      print('📥 [CHECK IN API RESPONSE]');
+      print('HTTP Status: ${response.statusCode}');
+      print('Response Body: ${response.data}');
+      print('----------------------------------------------------------------------');
 
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;

@@ -64,11 +64,12 @@ class ChangePasswordService {
         accessPoint: accessPoint,
       );
 
-      final hashedPassword = hashPassword(newPassword);
-
-      final payload = {
+      // 1. The Mobile endpoint (/api/HRM/Mobile/v1/UpdatePassword) hashes NewPasswd internally
+      // on SQL Server using HASHBYTES('SHA1', @NewPasswd). It expects PLAIN TEXT newPassword.
+      // (Pre-hashing it here caused double-hashing on the server, breaking subsequent logins).
+      final mobilePayload = {
         "Head": {
-          "NewPasswd": hashedPassword,
+          "NewPasswd": newPassword,
         }
       };
 
@@ -76,7 +77,7 @@ class ChangePasswordService {
       try {
         response = await _dio.post(
           newUrl,
-          data: payload,
+          data: mobilePayload,
           options: Options(
             headers: {
               'Content-Type': 'application/json',
@@ -86,7 +87,8 @@ class ChangePasswordService {
         );
       } on DioException catch (dioErr) {
         // If the newly added mobile endpoint throws an internal server error (e.g. backend index bug),
-        // fallback seamlessly to the stable ChangePassWord/v1/Save endpoint
+        // fallback seamlessly to the legacy web portal ChangePassWord/v1/Save endpoint,
+        // which stores NewPasswd directly without hashing (expects the SHA-1 hash).
         final statusCode = dioErr.response?.statusCode;
         if (statusCode == 500 || statusCode == 404 || statusCode == 400) {
           final fallbackUrl = AppUrls.getChangePasswordSaveUrl(
@@ -94,9 +96,15 @@ class ChangePasswordService {
             userId: targetId,
             accessPoint: accessPoint,
           );
+          final hashedPassword = hashPassword(newPassword);
+          final fallbackPayload = {
+            "Head": {
+              "NewPasswd": hashedPassword,
+            }
+          };
           response = await _dio.post(
             fallbackUrl,
-            data: payload,
+            data: fallbackPayload,
             options: Options(
               headers: {
                 'Content-Type': 'application/json',

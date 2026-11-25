@@ -24,10 +24,12 @@ class LeaveSummaryItem {
 
 class LeaveBalanceChart extends StatefulWidget {
   final List<LeaveSummaryItem>? items;
+  final bool showApplyLeave;
 
   const LeaveBalanceChart({
     super.key,
     this.items,
+    this.showApplyLeave = true,
   });
 
   @override
@@ -177,39 +179,41 @@ class _LeaveBalanceChartState extends State<LeaveBalanceChart> {
           // 2. Main Content (Donut Chart View OR Table View)
           _isTableView ? _buildTableView(data) : _buildDonutChartView(data, totalBalance),
 
-          const Divider(height: 24, color: AppColors.cardBorder),
+          if (widget.showApplyLeave) ...[
+            const Divider(height: 24, color: AppColors.cardBorder),
 
-          // 3. Action Footer
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              InkWell(
-                onTap: () => context.push('/leave'),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Row(
-                    children: const [
-                      Text(
-                        'Apply Leave',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
+            // 3. Action Footer
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                InkWell(
+                  onTap: () => context.push('/leave'),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Row(
+                      children: const [
+                        Text(
+                          'Apply Leave',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 15,
                           color: AppColors.primary,
                         ),
-                      ),
-                      SizedBox(width: 4),
-                      Icon(
-                        Icons.arrow_forward_rounded,
-                        size: 15,
-                        color: AppColors.primary,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );

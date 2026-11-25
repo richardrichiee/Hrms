@@ -45,16 +45,21 @@ class _ProfilePageState extends State<ProfilePage> {
       final branches = results[2] as List<BranchModel>;
       final savedBranchId = results[3] as int?;
 
-      String? branchName;
-      if (branches.isNotEmpty) {
-        if (savedBranchId != null) {
-          final match = branches.firstWhere(
-            (b) => b.id == savedBranchId,
-            orElse: () => branches.first,
-          );
-          branchName = match.name;
-        } else {
-          branchName = branches.first.name;
+      String? branchName = user?.branchName;
+      if (branchName == null || branchName.isEmpty) {
+        final defId = (user != null && user.branchId > 0)
+            ? user.branchId
+            : savedBranchId;
+        if (branches.isNotEmpty) {
+          if (defId != null) {
+            final match = branches.firstWhere(
+              (b) => b.id == defId,
+              orElse: () => branches.first,
+            );
+            branchName = match.name;
+          } else {
+            branchName = branches.first.name;
+          }
         }
       }
 

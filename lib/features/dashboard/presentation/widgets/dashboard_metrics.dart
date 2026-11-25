@@ -174,7 +174,7 @@ class DashboardMetrics extends StatelessWidget {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          '$leavesFormatted Days',
+                          '$leavesFormatted ${(leavesTakenCount == 1) ? "Day" : "Days"}',
                           maxLines: 1,
                           style: const TextStyle(
                             fontSize: 20,

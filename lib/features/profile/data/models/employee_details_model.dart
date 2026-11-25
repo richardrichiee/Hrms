@@ -13,7 +13,32 @@ class LeaveBalanceItem {
     required this.closing,
   });
 
+  /// True for Loss of Pay (LOP) leave types, which are unpaid and should not
+  /// accumulate or display a positive credited leave balance when cancelled.
+  bool get isLossOfPay {
+    final lower = leaveName.trim().toLowerCase();
+    return lower.contains('loss of pay') ||
+        lower == 'lop' ||
+        lower.contains('(lop)') ||
+        lower.startsWith('lop ') ||
+        lower.endsWith(' lop') ||
+        lower.contains('l.o.p') ||
+        lower.contains('lossofpay') ||
+        lower.contains('unpaid');
+  }
+
   factory LeaveBalanceItem.fromJson(Map<String, dynamic> json) {
+    final parsedName = json['LeaveName']?.toString() ?? 'Leave';
+    final lower = parsedName.trim().toLowerCase();
+    final isLop = lower.contains('loss of pay') ||
+        lower == 'lop' ||
+        lower.contains('(lop)') ||
+        lower.startsWith('lop ') ||
+        lower.endsWith(' lop') ||
+        lower.contains('l.o.p') ||
+        lower.contains('lossofpay') ||
+        lower.contains('unpaid');
+
     final closingVal = (json['Closing'] as num?)?.toDouble() ??
         (json['Balance'] as num?)?.toDouble() ??
         (json['BalanceLeaves'] as num?)?.toDouble() ??
@@ -29,10 +54,10 @@ class LeaveBalanceItem {
 
     return LeaveBalanceItem(
       leaveId: json['LeaveID'] ?? json['LeaveId'] ?? 0,
-      leaveName: json['LeaveName']?.toString() ?? 'Leave',
-      opening: openingVal,
+      leaveName: parsedName,
+      opening: isLop ? 0.0 : openingVal,
       taken: takenVal,
-      closing: closingVal,
+      closing: isLop ? 0.0 : closingVal,
     );
   }
 
@@ -143,7 +168,13 @@ class EmployeeDetailsModel {
                 '0',
           ) ??
           0,
-      noOfLeavesForTheMonth: (json['NoOfLeavesforTheMonth'] as num?) ?? 0,
+      noOfLeavesForTheMonth: num.tryParse(
+            json['NoOfLeavesforTheMonth']?.toString() ??
+                json['NoOfLeavesForTheMonth']?.toString() ??
+                json['NoOfLeaves']?.toString() ??
+                '0',
+          ) ??
+          0,
       leaveBalances: balances,
     );
   }
