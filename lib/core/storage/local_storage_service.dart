@@ -191,6 +191,7 @@ class LocalStorageService {
       await prefs.setBool(keyIsLoggedIn, false);
       await prefs.remove(keyOnlinePunchAnywhere);
       await prefs.remove(keyLastLoginTimestamp);
+      await prefs.remove(keyBiometricVerifiedDate);
       await prefs.remove(keyTodayPunchHistory);
       await prefs.remove(keyTodayPunchDate);
       await prefs.remove(keyLastPunchDate);
@@ -223,9 +224,18 @@ class LocalStorageService {
   static const String keyBiometricEnabled = 'key_biometric_enabled';
   static const String keyBiometricOnlyMode = 'key_biometric_only_mode';
   static const String keyLastLoginTimestamp = 'key_last_login_timestamp';
+  static const String keyBiometricVerifiedDate = 'key_biometric_verified_date';
 
-  /// In-memory session flag: resets to false on fresh app launch or sign-out.
+  /// In-memory mirror of daily biometric verification; cleared on sign-out or new day.
   static bool _biometricVerified = false;
+
+  static String _todayDateKey() {
+    final now = DateTime.now();
+    final y = now.year.toString().padLeft(4, '0');
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
 
   static Future<void> saveBiometricCredentials({
     required String loginId,
@@ -254,7 +264,7 @@ class LocalStorageService {
 
   static Future<void> clearBiometricCredentials() async {
     try {
-      _biometricVerified = false;
+      await setBiometricVerified(false);
       await setBiometricEnabled(false);
     } catch (_) {}
   }
@@ -331,10 +341,29 @@ class LocalStorageService {
 
   static Future<void> setBiometricVerified(bool verified) async {
     _biometricVerified = verified;
+    try {
+      final prefs = await _getPrefs();
+      if (verified) {
+        await prefs.setString(keyBiometricVerifiedDate, _todayDateKey());
+      } else {
+        await prefs.remove(keyBiometricVerifiedDate);
+      }
+    } catch (_) {}
   }
 
   static Future<bool> isBiometricVerified() async {
-    return _biometricVerified;
+    try {
+      final prefs = await _getPrefs();
+      final savedDate = prefs.getString(keyBiometricVerifiedDate);
+      if (savedDate != null && savedDate == _todayDateKey()) {
+        _biometricVerified = true;
+        return true;
+      }
+      _biometricVerified = false;
+      return false;
+    } catch (_) {
+      return _biometricVerified;
+    }
   }
 
   static Future<void> saveLoginTimestamp({DateTime? timestamp}) async {

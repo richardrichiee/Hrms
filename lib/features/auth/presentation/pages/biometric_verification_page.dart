@@ -80,7 +80,7 @@ class _BiometricVerificationPageState extends State<BiometricVerificationPage> {
     });
 
     final result = await _biometricService.authenticate(
-      localizedReason: 'Verify your identity to access Dream Team',
+      localizedReason: 'Verify your identity to access Ally One HR',
     );
 
     if (!mounted) return;

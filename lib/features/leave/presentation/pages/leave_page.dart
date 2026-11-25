@@ -40,7 +40,12 @@ class _LeavePageState extends State<LeavePage> {
   Future<void> _loadLeaveData() async {
     setState(() => _isLoading = true);
     final user = await LocalStorageService.getUser();
-    final rights = await _userRightsService.fetchUserRights(menuCode: 19);
+    final effectiveBranchId =
+        await LocalStorageService.getEffectiveUserBranchId();
+    final rights = await _userRightsService.fetchUserRights(
+      menuCode: 19,
+      branchId: effectiveBranchId,
+    );
 
     final results = await Future.wait([
       _leaveService.fetchLeaveApplications(),

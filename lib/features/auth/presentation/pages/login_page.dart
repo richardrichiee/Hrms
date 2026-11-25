@@ -174,7 +174,7 @@ class _LoginPageState extends State<LoginPage> {
     final authResult = await _biometricService.authenticate(
       localizedReason: _isDailyReauth
           ? 'Verify your identity to start today\'s session'
-          : 'Sign in to Dream Team using biometrics',
+          : 'Sign in to Ally One HR using biometrics',
     );
 
     if (!mounted) return;

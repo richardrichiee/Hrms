@@ -19,7 +19,9 @@ import '../../data/services/financial_year_service.dart';
 import '../../data/services/notification_service.dart';
 import '../../../leave/data/services/leave_service.dart';
 import '../../../leave/data/models/leave_application_model.dart';
+import '../../../auth/data/models/user_rights_model.dart';
 import '../../../auth/data/services/access_point_service.dart';
+import '../../../auth/data/services/user_rights_service.dart';
 import '../widgets/attendance_calendar_widget.dart';
 import '../widgets/dashboard_metrics.dart';
 import '../widgets/leave_balance_chart.dart';
@@ -39,6 +41,7 @@ class _DashboardPageState extends State<DashboardPage> {
   final _employeeService = EmployeeService();
   final _attendanceService = AttendanceService();
   final _notificationService = NotificationService();
+  final _userRightsService = UserRightsService();
 
   bool _isCheckedIn = false;
   bool _isLocationChecking = false;
@@ -62,6 +65,8 @@ class _DashboardPageState extends State<DashboardPage> {
   num _leavesCount = 0;
   int _notificationCount = 0;
   List<LeaveSummaryItem> _leaveSummaryItems = [];
+  bool _canViewLeave = false;
+  bool _canViewClaims = false;
 
   DateTime _selectedDate = DateTime.now();
 
@@ -125,6 +130,8 @@ class _DashboardPageState extends State<DashboardPage> {
         ? defaultBranchId
         : (user?.branchId ?? branchId);
     final empId = user?.employeeId;
+    final effectiveBranchId =
+        await LocalStorageService.getEffectiveUserBranchId();
 
     // 2. Fetch all dashboard data concurrently in parallel using Future.wait
     try {
@@ -146,6 +153,14 @@ class _DashboardPageState extends State<DashboardPage> {
           employeeId: empId,
         ),
         leaveService.fetchLeaveApplications(),
+        _userRightsService.fetchUserRights(
+          menuCode: 19,
+          branchId: effectiveBranchId,
+        ),
+        _userRightsService.fetchUserRights(
+          menuCode: 15,
+          branchId: effectiveBranchId,
+        ),
       ]);
 
       if (!mounted) return;
@@ -163,6 +178,13 @@ class _DashboardPageState extends State<DashboardPage> {
       final allLeaveApps = (results.length > 8 && results[8] is List)
           ? results[8] as List<LeaveApplicationModel>
           : <LeaveApplicationModel>[];
+      final leaveRights = (results.length > 9 && results[9] is UserRightsModel)
+          ? results[9] as UserRightsModel
+          : UserRightsModel.noAccess();
+      final claimsRights =
+          (results.length > 10 && results[10] is UserRightsModel)
+          ? results[10] as UserRightsModel
+          : UserRightsModel.noAccess();
 
       final currentUserName = (employeeDetails != null && employeeDetails.name.isNotEmpty)
           ? employeeDetails.name
@@ -173,12 +195,35 @@ class _DashboardPageState extends State<DashboardPage> {
         return _isCurrentUser(app.employee, currentUserName) && app.isApproved;
       }).toList();
 
-      // Dynamic calculation: calculate days taken from approved leave applications
-      // if the server's monthly ledger has not yet been processed (serverTaken == 0).
-      double calculateTaken(String leaveName, double serverTaken) {
-        if (serverTaken > 0) return serverTaken;
+      DateTime? parseLeaveFromDate(String rawDate) {
+        final trimmed = rawDate.trim();
+        try {
+          final parts = trimmed.split('/');
+          if (parts.length == 3) {
+            return DateTime(
+              int.parse(parts[2]),
+              int.parse(parts[1]),
+              int.parse(parts[0]),
+            );
+          }
+          return DateTime.tryParse(trimmed);
+        } catch (_) {
+          return DateTime.tryParse(trimmed);
+        }
+      }
+
+      // Filter approved leaves to the currently selected month/year.
+      final myApprovedLeavesThisMonth = myApprovedLeaves.where((app) {
+        final leaveDate = parseLeaveFromDate(app.fromDate);
+        return leaveDate != null &&
+            leaveDate.year == _selectedDate.year &&
+            leaveDate.month == _selectedDate.month;
+      }).toList();
+
+      // Calculate days taken in the selected month for a given leave type.
+      double calculateTakenThisMonth(String leaveName) {
         final target = leaveName.trim().toLowerCase();
-        return myApprovedLeaves.where((app) {
+        return myApprovedLeavesThisMonth.where((app) {
           final appName = app.leaveName.trim().toLowerCase();
           return appName == target ||
               appName.contains(target) ||
@@ -186,31 +231,10 @@ class _DashboardPageState extends State<DashboardPage> {
         }).fold(0.0, (sum, app) => sum + app.noOfLeaves);
       }
 
-      // Calculate dynamic approved leaves for the selected month/year
-      double dynamicLeavesThisMonth = 0.0;
-      for (final app in myApprovedLeaves) {
-        DateTime? leaveDate;
-        try {
-          final parts = app.fromDate.trim().split('/');
-          if (parts.length == 3) {
-            leaveDate = DateTime(
-              int.parse(parts[2]),
-              int.parse(parts[1]),
-              int.parse(parts[0]),
-            );
-          } else {
-            leaveDate = DateTime.tryParse(app.fromDate.trim());
-          }
-        } catch (_) {
-          leaveDate = DateTime.tryParse(app.fromDate.trim());
-        }
-
-        if (leaveDate != null &&
-            leaveDate.year == _selectedDate.year &&
-            leaveDate.month == _selectedDate.month) {
-          dynamicLeavesThisMonth += app.noOfLeaves;
-        }
-      }
+      final double dynamicLeavesThisMonth = myApprovedLeavesThisMonth.fold(
+        0.0,
+        (sum, app) => sum + app.noOfLeaves,
+      );
 
       final serverLeaves = (employeeDetails?.noOfLeavesForTheMonth ?? 0).toDouble();
       final finalLeavesCount = (dynamicLeavesThisMonth > 0 &&
@@ -239,14 +263,15 @@ class _DashboardPageState extends State<DashboardPage> {
           final color = distinctColors[colorIdx % distinctColors.length];
           colorIdx++;
 
-          final taken = calculateTaken(name, bal.taken);
-          final opening = bal.opening > 0 ? bal.opening : (bal.closing + taken);
-          final balance = (opening - taken) >= 0 ? (opening - taken) : 0.0;
+          final taken = calculateTakenThisMonth(name);
+          final balance =
+              (bal.isLossOfPay || bal.closing < 0) ? 0.0 : bal.closing;
+          final total = bal.isLossOfPay ? 0.0 : (balance + taken);
 
           summaryItems.add(
             LeaveSummaryItem(
               leaveName: name,
-              totalLeaves: opening,
+              totalLeaves: total,
               employeesTaken: taken,
               balanceLeaves: balance,
               color: color,
@@ -256,7 +281,7 @@ class _DashboardPageState extends State<DashboardPage> {
       } else if (dashboardLeaves.isNotEmpty) {
         for (final item in dashboardLeaves) {
           final name = item['LeaveName']?.toString() ?? 'Leave';
-          final taken = calculateTaken(name, 0.0);
+          final taken = calculateTakenThisMonth(name);
           final total =
               (item['EmployeesTakenLeave'] as num?)?.toDouble() ?? 10.0;
           final opening = total > 0 ? total : 10.0;
@@ -279,6 +304,8 @@ class _DashboardPageState extends State<DashboardPage> {
       setState(() {
         _notificationCount = notifCount;
         _leaveSummaryItems = summaryItems;
+        _canViewLeave = leaveRights.viewRight;
+        _canViewClaims = claimsRights.viewRight;
 
         if (employeeDetails != null) {
           _userName = employeeDetails.name;
@@ -1786,28 +1813,30 @@ class _DashboardPageState extends State<DashboardPage> {
                         context.go('/dashboard');
                       },
                     ),
-                    _buildDrawerTile(
-                      icon: Icons.calendar_today_rounded,
-                      title: 'Leave Management',
-                      isActive: false,
-                      iconBg: const Color(0xFFFEF3C7),
-                      iconColor: const Color(0xFFD97706),
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.push('/leave');
-                      },
-                    ),
-                    _buildDrawerTile(
-                      icon: Icons.receipt_long_rounded,
-                      title: 'Claims & Expenses',
-                      isActive: false,
-                      iconBg: const Color(0xFFEDE9FE),
-                      iconColor: const Color(0xFF7C3AED),
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.push('/claims');
-                      },
-                    ),
+                    if (_canViewLeave)
+                      _buildDrawerTile(
+                        icon: Icons.calendar_today_rounded,
+                        title: 'Leave Management',
+                        isActive: false,
+                        iconBg: const Color(0xFFFEF3C7),
+                        iconColor: const Color(0xFFD97706),
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/leave');
+                        },
+                      ),
+                    if (_canViewClaims)
+                      _buildDrawerTile(
+                        icon: Icons.receipt_long_rounded,
+                        title: 'Claims & Expenses',
+                        isActive: false,
+                        iconBg: const Color(0xFFEDE9FE),
+                        iconColor: const Color(0xFF7C3AED),
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/claims');
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -2198,7 +2227,10 @@ class _DashboardPageState extends State<DashboardPage> {
               const SizedBox(height: 16),
 
               // 6. Leave Balance Overview (Donut Chart / Table View)
-              LeaveBalanceChart(items: _leaveSummaryItems),
+              LeaveBalanceChart(
+                items: _leaveSummaryItems,
+                showApplyLeave: _canViewLeave,
+              ),
               const SizedBox(height: 24),
             ],
           ),
